@@ -1,0 +1,17 @@
+# AgentHub Backend - Python gitignore
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+*.db
+*.sqlite3
+node_modules/
+.DS_Store
+*.log
+data/
+logs/
