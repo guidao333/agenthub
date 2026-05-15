@@ -112,9 +112,9 @@ def list_capabilities(
 @router.get("/capabilities/{cap_id}")
 def get_capability(cap_id: str, db: Session = Depends(get_db)):
     """Get capability detail"""
-    cap = db.query(Capability).filter(
-        (Capability.cap_id == cap_id) | (Capability.id == int(cap_id) if cap_id.isdigit() else 0)
-    ).first()
+    cap = db.query(Capability).filter(Capability.cap_id == cap_id).first()
+    if not cap and cap_id.isdigit():
+        cap = db.query(Capability).filter(Capability.id == int(cap_id)).first()
     if not cap:
         raise HTTPException(404, "Capability not found")
 

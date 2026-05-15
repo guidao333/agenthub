@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ..models import get_db, Subscription, Capability, CallLog
 from ..config import RATE_LIMIT_PER_MINUTE
 
-router = APIRouter(prefix="/api", tags=["api-call"])
+router = APIRouter(prefix="", tags=["api-call"])
 
 # Simple in-memory rate limiter
 _rate_store: dict[str, list[float]] = {}
