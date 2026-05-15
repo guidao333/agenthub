@@ -1,0 +1,53 @@
+id: "isp-broadband-diagnosis"
+name: "宽带故障诊断"
+version: "1.0.0"
+author: "platform"
+description: "ISP宽带故障智能诊断助手，支持光猫、线路、认证等多种故障类型排查"
+long_description: |
+  支持常见宽带故障类型诊断：
+  - 光猫亮红灯/LOS灯闪烁
+  - 网速慢/频繁掉线
+  - PPPoE拨号失败（691/678错误）
+  - WiFi连不上/信号弱
+  - IPTV卡顿/无法观看
+  适用于ISP宽带客服场景，帮助快速定位故障并给出处理建议。
+
+category: "isp"
+subcategory: "cs-assist"
+tags: ["ISP", "宽带", "故障诊断", "客服", "光猫", "PPPoE"]
+
+runtime:
+  language: "python"
+  version: ">=3.10"
+  timeout_seconds: 30
+  memory_limit: "128MB"
+
+interfaces:
+  chat: true
+  api: true
+  api_params:
+    - name: "symptom"
+      type: "string"
+      required: true
+      description: "故障现象描述"
+    - name: "device_type"
+      type: "string"
+      required: false
+      description: "设备类型，如光猫型号"
+
+security:
+  network_access: "restricted"
+  file_access: "sandbox"
+
+test_cases:
+  - name: "光猫红灯"
+    input: "我的光猫亮红灯了，上不了网"
+    expected_keywords: ["光纤", "LOS", "检查"]
+  - name: "网速慢"
+    input: "网速很慢，只有几兆"
+    expected_keywords: ["测速", "线路", "端口"]
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-05-16"
+    changes: "初始版本"
