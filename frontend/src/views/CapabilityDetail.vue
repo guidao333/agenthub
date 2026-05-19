@@ -32,8 +32,19 @@
         </div>
 
         <!-- Tags -->
-        <div v-if="cap.tags && cap.tags.length" class="flex flex-wrap gap-2">
-          <span v-for="tag in cap.tags" :key="tag" class="px-3 py-1 bg-primary-50 text-primary-600 text-sm rounded-full">{{ tag }}</span>
+        <div class="flex flex-wrap gap-2">
+          <span v-if="cap.level" class="px-3 py-1 text-sm rounded-full" :class="cap.level === 'atomic' ? 'bg-green-50 text-green-700' : 'bg-purple-50 text-purple-700'">
+            {{ cap.level === 'atomic' ? '⚛️ 原子能力' : '🧩 组合能力' }}
+          </span>
+          <span v-for="tag in (cap.tags || [])" :key="tag" class="px-3 py-1 bg-primary-50 text-primary-600 text-sm rounded-full">{{ tag }}</span>
+        </div>
+
+        <!-- Dependencies -->
+        <div v-if="cap.dependencies && cap.dependencies.length" class="bg-purple-50 rounded-xl p-4">
+          <h3 class="text-sm font-semibold text-purple-800 mb-2">🧩 编排的原子能力</h3>
+          <div class="flex flex-wrap gap-2">
+            <span v-for="dep in cap.dependencies" :key="dep" class="px-3 py-1 bg-white text-purple-600 text-sm rounded-full border border-purple-200">{{ dep }}</span>
+          </div>
         </div>
 
         <!-- Description -->
@@ -92,6 +103,12 @@
         <div class="bg-white rounded-xl border border-gray-200 p-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-3">能力信息</h3>
           <dl class="space-y-3 text-sm">
+            <div class="flex justify-between">
+              <dt class="text-gray-500">能力层级</dt>
+              <dd class="font-medium" :class="cap.level === 'atomic' ? 'text-green-600' : 'text-purple-600'">
+                {{ cap.level === 'atomic' ? '⚛️ 原子能力' : '🧩 组合能力' }}
+              </dd>
+            </div>
             <div class="flex justify-between">
               <dt class="text-gray-500">分类</dt>
               <dd class="text-gray-900 font-medium">{{ cap.category || '-' }}</dd>
@@ -155,7 +172,7 @@ async function handleSubscribe() {
   if (!isLoggedIn.value) { router.push({ name: 'login', query: { redirect: route.fullPath } }); return }
   subscribing.value = true
   try {
-    await marketAPI.subscribe(route.params.capId)
+    await marketAPI.subscribe(cap.value.cap_id)
     isSubscribed.value = true
   } catch (e) {
     alert(e.response?.data?.detail || '订阅失败')
@@ -166,7 +183,7 @@ async function handleSubscribe() {
 
 async function startChat() {
   try {
-    const { data } = await chatAPI.createSession(route.params.capId)
+    const { data } = await chatAPI.createSession(cap.value.cap_id)
     router.push({ name: 'chat', params: { sessionId: data.session_id } })
   } catch (e) {
     alert(e.response?.data?.detail || '创建会话失败')

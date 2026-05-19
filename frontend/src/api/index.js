@@ -70,6 +70,14 @@ export const dashboardAPI = {
   createApiKey: (subscription_id) => api.post('/dashboard/api-keys', { subscription_id }),
 }
 
+// Config
+export const configAPI = {
+  categories: () => api.get('/config/categories'),
+  categoryTree: () => api.get('/config/categories/tree'),
+  tags: () => api.get('/config/tags'),
+  levels: () => api.get('/config/levels'),
+}
+
 // Developer
 export const developerAPI = {
   capabilities: () => api.get('/developer/capabilities'),

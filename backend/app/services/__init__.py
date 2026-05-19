@@ -1,1 +1,1 @@
-"""Services package"""
+"""Services package - business logic layer"""

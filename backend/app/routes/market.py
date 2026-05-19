@@ -42,21 +42,60 @@ class CapabilityDetail(CapabilityListItem):
 
 @router.get("/categories")
 def list_categories(db: Session = Depends(get_db)):
-    """Get all categories with counts"""
-    cats = db.query(Capability.category, Capability.subcategory, Capability.status
-                    ).filter(Capability.status == "published").all()
-    result = {}
-    for cat, subcat, _ in cats:
-        if cat not in result:
-            result[cat] = {"name": cat, "subcategories": [], "available": cat == "isp"}
-        if subcat and subcat not in result[cat]["subcategories"]:
-            result[cat]["subcategories"].append(subcat)
-    return list(result.values())
+    """Get full category tree with counts from config + DB stats"""
+    from pathlib import Path
+    import yaml as _yaml
+
+    yaml_path = Path(__file__).resolve().parent.parent.parent.parent / "config" / "categories.yaml"
+    if yaml_path.exists():
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            cfg = _yaml.safe_load(f)
+    else:
+        cfg = {"categories": []}
+
+    # Get counts from DB
+    from sqlalchemy import func
+    cap_counts = dict(
+        db.query(Capability.category, func.count(Capability.id))
+        .filter(Capability.status == "published")
+        .group_by(Capability.category)
+        .all()
+    )
+    subcap_counts = dict(
+        db.query(Capability.subcategory, func.count(Capability.id))
+        .filter(Capability.status == "published")
+        .group_by(Capability.subcategory)
+        .all()
+    )
+
+    result = []
+    for cat in cfg.get("categories", []):
+        cat_item = {
+            "id": cat["id"],
+            "name": cat["name"],
+            "icon": cat.get("icon", "📦"),
+            "description": cat.get("description", ""),
+            "color": cat.get("color", "#6B7280"),
+            "count": cap_counts.get(cat["id"], 0),
+            "subcategories": [],
+        }
+        for sub in cat.get("subcategories", []):
+            cat_item["subcategories"].append({
+                "id": sub["id"],
+                "name": sub["name"],
+                "description": sub.get("description", ""),
+                "count": subcap_counts.get(sub["id"], 0),
+            })
+        result.append(cat_item)
+    return result
 
 
 @router.get("/capabilities")
 def list_capabilities(
     category: str | None = None,
+    subcategory: str | None = None,
+    level: str | None = None,
+    tag: str | None = None,
     search: str | None = None,
     sort: str = "call_count",
     page: int = Query(1, ge=1),
@@ -68,6 +107,12 @@ def list_capabilities(
 
     if category:
         q = q.filter(Capability.category == category)
+    if subcategory:
+        q = q.filter(Capability.subcategory == subcategory)
+    if level:
+        q = q.filter(Capability.level == level)
+    if tag:
+        q = q.filter(Capability.tags.contains(tag))
     if search:
         q = q.filter(or_(
             Capability.name.contains(search),
@@ -98,6 +143,8 @@ def list_capabilities(
             "description": cap.description,
             "category": cap.category,
             "subcategory": cap.subcategory,
+            "level": cap.level,
+            "dependencies": json.loads(cap.dependencies) if cap.dependencies else [],
             "tags": json.loads(cap.tags) if cap.tags else [],
             "pricing_model": cap.pricing_model,
             "price": cap.price,
@@ -130,6 +177,8 @@ def get_capability(cap_id: str, db: Session = Depends(get_db)):
         "long_description": cap.long_description,
         "category": cap.category,
         "subcategory": cap.subcategory,
+        "level": cap.level,
+        "dependencies": json.loads(cap.dependencies) if cap.dependencies else [],
         "tags": json.loads(cap.tags) if cap.tags else [],
         "pricing_model": cap.pricing_model,
         "price": cap.price,

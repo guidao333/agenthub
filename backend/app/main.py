@@ -1,54 +1,61 @@
-"""AgentHub FastAPI Application"""
+"""AgentHub FastAPI Application v2.0"""
+
 import time
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from .models import init_db, SessionLocal, User
-from .auth import hash_password
-from .routes import auth, market, chat, developer, admin, dashboard, api_call
+from .config import (
+    DEEPSEEK_API_KEY, DATA_DIR, LOGS_DIR, SMTP_USER, SMTP_PASS,
+    HEALTH_CHECK_INTERVAL_SECONDS,
+)
+from .models import init_db
+from .middleware.request_log import request_logging
+from .middleware.rate_limit import rate_limit_middleware, rate_limiter
+from .middleware.error_handler import error_handler
+from .routes import auth, market, chat, developer, admin, dashboard, api_call, config, billing, bridge
 
-# Configure logging
+# ── Logging ──
+os.makedirs(LOGS_DIR, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(name)s] [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(str(LOGS_DIR / "agenthub.log"), encoding="utf-8"),
+    ],
 )
 logger = logging.getLogger("agenthub")
+
+# ── Health Monitor (background) ──
+_health_task = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: create tables + default admin"""
+    """Startup / Shutdown"""
+    # ── Startup ──
     init_db()
+    logger.info(f"✓ Database initialized at {DATA_DIR}/agenthub.db")
+    logger.info(f"✓ AgentHub v2.0 started")
 
-    db = SessionLocal()
-    try:
-        if not db.query(User).filter(User.username == "admin").first():
-            admin = User(
-                username="admin",
-                email="admin@agenthub.local",
-                password_hash=hash_password("admin123"),
-                role="admin",
-            )
-            db.add(admin)
-            db.commit()
-            logger.info("Default admin user created")
-    finally:
-        db.close()
-
-    logger.info("AgentHub started - database initialized")
     yield
+
+    # ── Shutdown ──
     logger.info("AgentHub shutting down")
 
 
+# ── FastAPI App ──
 app = FastAPI(
     title="AgentHub",
-    description="Agent Capability Marketplace Platform",
-    version="0.1.0",
+    description="Agent Capability Marketplace Platform v2.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
-# CORS
+# ── CORS ──
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -57,37 +64,42 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Exception Handler ──
+app.add_exception_handler(Exception, error_handler)
 
-# Request logging middleware
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    start = time.time()
-    response: Response = await call_next(request)
-    duration = int((time.time() - start) * 1000)
-    logger.info(f"{request.method} {request.url.path} → {response.status_code} ({duration}ms)")
-    return response
+# ── Middleware (order matters: bottom runs first) ──
+app.middleware("http")(rate_limit_middleware)
+app.middleware("http")(request_logging)
 
-
-# Register all routes
+# ── Routes ──
 app.include_router(auth.router, prefix="/api")
 app.include_router(market.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+app.include_router(bridge.router, prefix="/api/v1/bridge")
 app.include_router(developer.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(api_call.router, prefix="/api")
+app.include_router(config.router, prefix="/api")
+app.include_router(billing.router, prefix="/api")
 
 
+# ── Root ──
 @app.get("/")
 def root():
     return {
         "name": "AgentHub",
-        "version": "0.1.0",
+        "version": "2.0.0",
         "status": "running",
         "docs": "/docs",
+        "site": "https://www.agenthub.wang",
     }
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "version": "2.0.0",
+        "llm_configured": bool(DEEPSEEK_API_KEY),
+    }

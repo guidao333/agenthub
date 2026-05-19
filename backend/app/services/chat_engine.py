@@ -1,215 +1,191 @@
-"""Chat engine: LLM interaction with function calling"""
+"""对话引擎 - LLM Function Calling + 工具执行
+
+MVP 简化版，后续集成完整 DeepSeek Function Calling。
+"""
+
 import json
-import os
-import subprocess
-import tempfile
-import yaml
-from pathlib import Path
-from typing import AsyncGenerator
-import httpx
-from ..config import (
-    DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL,
-    CAPABILITIES_DIR, MAX_TOOL_CALL_ROUNDS, CAPABILITY_TIMEOUT_SECONDS,
-)
+import logging
+from typing import Optional
+from ..config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, MAX_TOOL_CALL_ROUNDS
 
-# Output filter patterns - block internal logic disclosure
-BLOCKED_PATTERNS = [
-    "知识库", "SOUL.md", "系统提示", "system prompt",
-    "内部实现", "代码逻辑", "capability.yaml",
-    "我已经被指示", "我被要求不",
-]
+logger = logging.getLogger("agenthub.chat_engine")
 
 
-class ChatEngine:
-    """Handles LLM chat with function calling for a capability"""
+def process_message(message: str, capability, context: list,
+                    allowed_tools: list = None,
+                    customer_config: dict = None) -> dict:
+    """
+    处理用户消息，返回 LLM 回复或工具执行指令
 
-    def __init__(self, capability):
-        self.capability = capability
-        self.soul_md = ""
-        self.tools = []
-        self.tool_scripts = {}
-        self._load_capability()
+    Args:
+        message: 用户消息
+        capability: Capability 对象
+        context: 对话上下文
+        allowed_tools: 桥接模式下的允许工具白名单
+        customer_config: 客户配置（环境变量）
 
-    def _load_capability(self):
-        """Load capability SOUL.md and tool definitions"""
-        cap_dir = CAPABILITIES_DIR / self.capability.cap_id
-        if not cap_dir.exists():
-            return
+    Returns:
+        {"type": "final_reply", "content": "..."}
+        {"type": "tool_call", "tool_id": "...", "tool_name": "...", "params": {...}}
+    """
 
-        # Load SOUL.md
-        soul_path = cap_dir / "agent" / "SOUL.md"
-        if soul_path.exists():
-            self.soul_md = soul_path.read_text(encoding="utf-8")
+    # MVP 简化版：关键词匹配
+    # 完整版会集成 DeepSeek Function Calling
+    if DEEPSEEK_API_KEY:
+        return _call_llm(message, capability, context, allowed_tools, customer_config)
 
-        # Load capability.yaml for tool definitions
-        yaml_path = cap_dir / "capability.yaml"
-        if yaml_path.exists():
-            with open(yaml_path, "r", encoding="utf-8") as f:
-                config = yaml.safe_load(f)
-                # Extract API params as tools if configured
-                interfaces = config.get("interfaces", {})
-                if interfaces.get("api_params"):
-                    self.tools = [{
-                        "type": "function",
-                        "function": {
-                            "name": "execute_capability",
-                            "description": f"Execute {self.capability.name}",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    p["name"]: {"type": p["type"], "description": p.get("description", "")}
-                                    for p in interfaces["api_params"]
-                                },
-                                "required": [p["name"] for p in interfaces["api_params"] if p.get("required")],
-                            },
-                        },
-                    }]
+    # 无 LLM Key 时的 fallback 回复
+    return _simple_reply(message, capability)
 
-        # Load tool scripts
-        tools_dir = cap_dir / "agent" / "tools"
-        if tools_dir.exists():
-            for script in tools_dir.glob("*.py"):
-                self.tool_scripts[script.stem] = str(script)
 
-    def _build_messages(self, history: list) -> list:
-        """Build messages array for LLM API"""
-        messages = []
-        if self.soul_md:
-            messages.append({"role": "system", "content": self.soul_md})
+def _call_llm(message, capability, context, allowed_tools, customer_config) -> dict:
+    """调用 DeepSeek API 处理"""
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=DEEPSEEK_API_KEY,
+            base_url=DEEPSEEK_BASE_URL,
+        )
+
+        # 构建 system prompt
+        system_parts = []
+        # 从能力包加载 SOUL.md（这里简化为从数据库的 runtime_config 读取）
+        soul_text = "你是一个专业的AI助手，根据提供的信息和工具来帮助用户解决问题。"
+        if capability.long_description:
+            soul_text += f"\n\n## 能力描述\n{capability.long_description}"
+
+        system_parts.append({"role": "system", "content": soul_text})
+
+        # 构建消息列表
+        messages = system_parts + context[-10:]  # 最多保留最近 10 轮
+
+        # 构建工具定义（从能力包的 tools 信息获取）
+        # MVP 简化：使用内置工具
+        tools = _get_tool_definitions(allowed_tools)
+
+        # 调用 DeepSeek
+        response = client.chat.completions.create(
+            model=DEEPSEEK_MODEL,
+            messages=messages,
+            tools=tools if tools else None,
+            temperature=0.3,
+            max_tokens=2000,
+        )
+
+        choice = response.choices[0]
+        if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
+            # LLM 请求执行工具
+            tool_call = choice.message.tool_calls[0]
+            return {
+                "type": "tool_call",
+                "tool_id": tool_call.id,
+                "tool_name": tool_call.function.name,
+                "params": json.loads(tool_call.function.arguments),
+            }
         else:
-            messages.append({
-                "role": "system",
-                "content": f"你是 {self.capability.name} 的AI助手。{self.capability.description or ''}"
-            })
-        messages.extend(history)
-        return messages
+            # LLM 返回普通文本回复
+            return {
+                "type": "final_reply",
+                "content": choice.message.content or "处理完成",
+            }
 
-    def _execute_tool(self, tool_name: str, arguments: dict) -> str:
-        """Execute a tool script in a subprocess"""
-        script_path = self.tool_scripts.get(tool_name)
-        if not script_path:
-            return json.dumps({"error": f"Tool '{tool_name}' not found"})
+    except Exception as e:
+        logger.error(f"LLM call failed: {e}")
+        return {
+            "type": "final_reply",
+            "content": f"AI 处理出错: {str(e)}",
+        }
 
-        # Write arguments to temp file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump(arguments, f)
-            args_file = f.name
 
-        try:
-            result = subprocess.run(
-                ["python3", script_path, args_file],
-                capture_output=True, text=True, timeout=CAPABILITY_TIMEOUT_SECONDS,
-                env={**os.environ, "AGENTHUB_CAP_ID": self.capability.cap_id},
-            )
-            return result.stdout if result.returncode == 0 else f"Error: {result.stderr}"
-        except subprocess.TimeoutExpired:
-            return json.dumps({"error": "Tool execution timed out"})
-        finally:
-            os.unlink(args_file)
+def _get_tool_definitions(allowed_tools: list = None) -> list:
+    """获取 LLM 工具定义"""
+    all_tools = {
+        "ssh_execute": {
+            "type": "function",
+            "function": {
+                "name": "ssh_execute",
+                "description": "通过 SSH 执行远程命令",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "host": {"type": "string", "description": "设备 IP"},
+                        "port": {"type": "integer", "description": "SSH 端口"},
+                        "username": {"type": "string", "description": "登录用户名"},
+                        "password": {"type": "string", "description": "登录密码"},
+                        "command": {"type": "string", "description": "要执行的命令"},
+                    },
+                    "required": ["host", "username", "password", "command"],
+                },
+            },
+        },
+        "snmp_get": {
+            "type": "function",
+            "function": {
+                "name": "snmp_get",
+                "description": "SNMP 获取设备信息",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "host": {"type": "string", "description": "设备 IP"},
+                        "community": {"type": "string", "description": "SNMP community"},
+                        "oids": {"type": "array", "items": {"type": "string"}, "description": "OID 列表"},
+                    },
+                    "required": ["host", "community", "oids"],
+                },
+            },
+        },
+        "http_request": {
+            "type": "function",
+            "function": {
+                "name": "http_request",
+                "description": "发送 HTTP 请求",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"},
+                        "method": {"type": "string", "enum": ["GET", "POST"]},
+                        "headers": {"type": "object"},
+                        "body": {"type": "string"},
+                    },
+                    "required": ["url", "method"],
+                },
+            },
+        },
+        "ping_check": {
+            "type": "function",
+            "function": {
+                "name": "ping_check",
+                "description": "Ping 检测设备是否在线",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "host": {"type": "string", "description": "设备 IP"},
+                        "count": {"type": "integer", "description": "Ping 次数"},
+                    },
+                    "required": ["host"],
+                },
+            },
+        },
+    }
 
-    def _filter_output(self, text: str) -> str:
-        """Filter sensitive information from output"""
-        for pattern in BLOCKED_PATTERNS:
-            if pattern in text:
-                # Replace the sensitive part
-                text = text.replace(pattern, "***")
-        return text
+    if allowed_tools:
+        return [v for k, v in all_tools.items() if k in allowed_tools]
+    return list(all_tools.values())
 
-    async def stream_chat(self, history: list) -> AsyncGenerator[str, None]:
-        """Stream chat response with tool calling loop"""
-        messages = self._build_messages(history)
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for round_num in range(MAX_TOOL_CALL_ROUNDS + 1):
-                # Call LLM API
-                payload = {
-                    "model": DEEPSEEK_MODEL,
-                    "messages": messages,
-                    "stream": True,
-                }
-                if self.tools:
-                    payload["tools"] = self.tools
+def _simple_reply(message: str, capability) -> dict:
+    """无 LLM 时的简单回复"""
+    # 关键词匹配
+    keywords = {
+        "帮助": f"我是 {capability.name}，可以帮你完成相关操作。请问有什么具体需要？",
+        "你好": f"你好！我是 {capability.name}，有什么可以帮你的？",
+    }
+    for kw, reply in keywords.items():
+        if kw in message:
+            return {"type": "final_reply", "content": reply}
 
-                headers = {
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                    "Content-Type": "application/json",
-                }
-
-                full_content = ""
-                tool_calls = []
-
-                async with client.stream(
-                    "POST",
-                    f"{DEEPSEEK_BASE_URL}/chat/completions",
-                    json=payload,
-                    headers=headers,
-                ) as resp:
-                    if resp.status_code != 200:
-                        error_text = await resp.aread()
-                        yield f"[Error: LLM API returned {resp.status_code}]"
-                        return
-
-                    async for line in resp.aiter_lines():
-                        if not line.startswith("data: "):
-                            continue
-                        data = line[6:]
-                        if data == "[DONE]":
-                            break
-                        try:
-                            chunk = json.loads(data)
-                            delta = chunk.get("choices", [{}])[0].get("delta", {})
-
-                            # Content
-                            if delta.get("content"):
-                                content = self._filter_output(delta["content"])
-                                full_content += content
-                                yield content
-
-                            # Tool calls
-                            if delta.get("tool_calls"):
-                                for tc in delta["tool_calls"]:
-                                    if tc.get("index") is not None:
-                                        while len(tool_calls) <= tc["index"]:
-                                            tool_calls.append({"id": "", "function": {"name": "", "arguments": ""}})
-                                        idx = tc["index"]
-                                        if tc.get("id"):
-                                            tool_calls[idx]["id"] = tc["id"]
-                                        if tc.get("function", {}).get("name"):
-                                            tool_calls[idx]["function"]["name"] += tc["function"]["name"]
-                                        if tc.get("function", {}).get("arguments"):
-                                            tool_calls[idx]["function"]["arguments"] += tc["function"]["arguments"]
-                        except json.JSONDecodeError:
-                            continue
-
-                # If no tool calls, we're done
-                if not tool_calls:
-                    return
-
-                # Process tool calls
-                yield json.dumps({"type": "tool_call", "count": len(tool_calls)})
-
-                messages.append({
-                    "role": "assistant",
-                    "content": full_content or None,
-                    "tool_calls": [
-                        {"id": tc["id"], "type": "function", "function": tc["function"]}
-                        for tc in tool_calls
-                    ],
-                })
-
-                for tc in tool_calls:
-                    fn_name = tc["function"]["name"]
-                    try:
-                        fn_args = json.loads(tc["function"]["arguments"])
-                    except json.JSONDecodeError:
-                        fn_args = {}
-
-                    result = self._execute_tool(fn_name, fn_args)
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc["id"],
-                        "content": result[:4000],  # Limit tool output
-                    })
-
-        # Exhausted tool call rounds
-        return
+    return {
+        "type": "final_reply",
+        "content": f"已收到您的请求，正在使用 {capability.name} 处理。如需进一步支持，请详细描述您的问题。",
+    }

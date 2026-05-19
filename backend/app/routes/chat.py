@@ -1,23 +1,23 @@
 """Chat routes: create sessions, send messages (SSE streaming)"""
+
 import json
 import uuid
 import time
-import asyncio
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from ..models import get_db, ChatSession, Subscription, Capability, CallLog, User
 from ..auth import get_current_user
-from ..services.chat_engine import ChatEngine
-from ..config import MAX_CONTEXT_TURNS
+from ..utils.errors import ErrorCode, AppException, api_response
+from ..utils.helpers import now_timestamp, new_session_id, new_trace_id
+from ..config import MAX_CONTEXT_TURNS, MAX_TOOL_CALL_ROUNDS
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 class CreateSessionRequest(BaseModel):
-    capability_id: str  # cap_id string
+    capability_id: str
 
 
 class SendMessageRequest(BaseModel):
@@ -30,22 +30,22 @@ def create_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Create a new chat session for a capability"""
+    """创建对话会话"""
     cap = db.query(Capability).filter(Capability.cap_id == req.capability_id).first()
     if not cap or cap.status != "published":
-        raise HTTPException(404, "Capability not found")
+        raise AppException(ErrorCode.CAP_NOT_FOUND)
 
-    # Verify subscription
+    # 检查订阅
     sub = db.query(Subscription).filter(
         Subscription.customer_id == current_user.id,
         Subscription.capability_id == cap.id,
         Subscription.status == "active",
     ).first()
     if not sub:
-        raise HTTPException(403, "Not subscribed to this capability")
+        raise AppException(ErrorCode.CAP_NOT_SUBSCRIBED)
 
-    session_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    session_id = uuid.uuid4().hex
+    now = now_timestamp()
     chat_session = ChatSession(
         id=session_id,
         user_id=current_user.id,
@@ -57,7 +57,11 @@ def create_session(
     db.add(chat_session)
     db.commit()
 
-    return {"session_id": session_id, "capability": cap.name}
+    return api_response(data={
+        "session_id": session_id,
+        "capability": cap.name,
+        "cap_id": cap.cap_id,
+    })
 
 
 @router.post("/sessions/{session_id}/message")
@@ -67,76 +71,93 @@ async def send_message(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Send a message and get streaming response"""
+    """发送消息并获取流式响应"""
     chat_session = db.query(ChatSession).filter(
         ChatSession.id == session_id,
         ChatSession.user_id == current_user.id,
         ChatSession.status == "active",
     ).first()
     if not chat_session:
-        raise HTTPException(404, "Session not found")
+        raise AppException(ErrorCode.COMMON_NOT_FOUND, detail="会话不存在或已关闭")
 
     cap = db.query(Capability).filter(Capability.id == chat_session.capability_id).first()
     if not cap:
-        raise HTTPException(404, "Capability not found")
+        raise AppException(ErrorCode.CAP_NOT_FOUND)
 
-    # Load conversation history
-    history = json.loads(chat_session.context) if chat_session.context else []
-    history.append({"role": "user", "content": req.message})
-
-    # Get subscription for billing
+    # 检查订阅
     sub = db.query(Subscription).filter(
         Subscription.customer_id == current_user.id,
         Subscription.capability_id == cap.id,
         Subscription.status == "active",
     ).first()
 
+    # 加载对话历史
+    history = json.loads(chat_session.context) if chat_session.context else []
+    history.append({"role": "user", "content": req.message})
+
     start_time = time.time()
-    engine = ChatEngine(capability=cap)
+    trace_id = new_trace_id()
 
     async def generate():
         full_response = ""
         tool_calls_count = 0
-        token_in = 0
-        token_out = 0
         status = "success"
 
         try:
-            async for chunk in engine.stream_chat(history):
-                if isinstance(chunk, dict) and chunk.get("type") == "tool_call":
-                    tool_calls_count += 1
-                    continue
-                full_response += chunk
-                yield f"data: {json.dumps({'content': chunk})}\n\n"
+            # MVP 简化版：使用同步处理并模拟流式输出
+            from ..services.chat_engine import process_message
+            result = process_message(
+                message=req.message,
+                capability=cap,
+                context=history,
+            )
 
-            # Update history
+            if result.get("type") == "tool_call":
+                tool_calls_count += 1
+                content = f"正在执行 {result.get('tool_name')}..."
+            else:
+                content = result.get("content", "处理完成")
+
+            full_response = content
+
+            # 模拟流式输出
+            import asyncio
+            for chunk in [content[i:i+20] for i in range(0, len(content), 20)]:
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+                await asyncio.sleep(0.02)
+
+            # 更新对话历史
             history.append({"role": "assistant", "content": full_response})
-            # Trim to max turns
             if len(history) > MAX_CONTEXT_TURNS * 2:
                 history = history[-(MAX_CONTEXT_TURNS * 2):]
             chat_session.context = json.dumps(history)
-            chat_session.updated_at = datetime.now(timezone.utc).isoformat()
+            chat_session.updated_at = now_timestamp()
 
         except Exception as e:
             status = "error"
+            import traceback
+            traceback.print_exc()
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             full_response = str(e)
+
         finally:
             duration_ms = int((time.time() - start_time) * 1000)
-            # Log call
+            charged = cap.price if (status == "success" and cap.pricing_model == "per_call" and cap.price > 0) else 0
+
             log = CallLog(
                 subscription_id=sub.id if sub else None,
                 capability_id=cap.id,
+                customer_id=current_user.id,
                 session_id=session_id,
+                trace_id=trace_id,
+                mode="cloud",
                 input_summary=req.message[:200],
                 output_summary=full_response[:200],
                 tool_calls=tool_calls_count,
                 duration_ms=duration_ms,
-                token_input=token_in,
-                token_output=token_out,
                 status=status,
-                charged=cap.price if status == "success" and cap.pricing_model == "per_call" else 0,
-                created_at=datetime.now(timezone.utc).isoformat(),
+                charged=charged,
+                created_at=now_timestamp(),
             )
             db.add(log)
             if status == "success":
@@ -154,16 +175,16 @@ def get_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get chat session history"""
+    """获取对话历史"""
     chat_session = db.query(ChatSession).filter(
         ChatSession.id == session_id,
         ChatSession.user_id == current_user.id,
     ).first()
     if not chat_session:
-        raise HTTPException(404, "Session not found")
+        raise AppException(ErrorCode.COMMON_NOT_FOUND)
 
     history = json.loads(chat_session.context) if chat_session.context else []
-    return {"session_id": session_id, "history": history}
+    return api_response(data={"session_id": session_id, "history": history})
 
 
 @router.delete("/sessions/{session_id}")
@@ -172,14 +193,15 @@ def close_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Close a chat session"""
+    """关闭会话"""
     chat_session = db.query(ChatSession).filter(
         ChatSession.id == session_id,
         ChatSession.user_id == current_user.id,
     ).first()
     if not chat_session:
-        raise HTTPException(404, "Session not found")
+        raise AppException(ErrorCode.COMMON_NOT_FOUND)
 
     chat_session.status = "closed"
+    chat_session.updated_at = now_timestamp()
     db.commit()
-    return {"status": "closed"}
+    return api_response(data={"session_id": session_id, "status": "closed"})

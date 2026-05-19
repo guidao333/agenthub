@@ -15,3 +15,7 @@ node_modules/
 *.log
 data/
 logs/
+backups/
+capabilities/.temp/
+*.tar.gz
+test_imports.py

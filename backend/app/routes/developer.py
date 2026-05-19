@@ -22,6 +22,8 @@ class CapabilityCreate(BaseModel):
     long_description: str = ""
     category: str = "isp"
     subcategory: str = ""
+    level: str = "atomic"  # atomic / composite
+    dependencies: list[str] = []  # cap_ids this capability orchestrates
     tags: list[str] = []
     pricing_model: str = "per_call"
     price: float = 0.1
@@ -36,6 +38,8 @@ class CapabilityUpdate(BaseModel):
     long_description: str | None = None
     category: str | None = None
     subcategory: str | None = None
+    level: str | None = None
+    dependencies: list[str] | None = None
     tags: list[str] | None = None
     pricing_model: str | None = None
     price: float | None = None
@@ -93,6 +97,8 @@ def create_capability(
         long_description=req.long_description,
         category=req.category,
         subcategory=req.subcategory,
+        level=req.level,
+        dependencies=json.dumps(req.dependencies),
         tags=json.dumps(req.tags),
         status="draft",
         pricing_model=req.pricing_model,
@@ -136,7 +142,7 @@ def update_capability(
 
     updates = req.model_dump(exclude_unset=True)
     for key, value in updates.items():
-        if key == "tags":
+        if key in ("tags", "dependencies"):
             setattr(cap, key, json.dumps(value))
         elif key in ("runtime_config", "interfaces_config"):
             setattr(cap, key, json.dumps(value))

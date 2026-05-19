@@ -20,6 +20,9 @@
 
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-2">
+        <span v-if="cap.level" class="px-2 py-0.5 text-xs rounded-full" :class="cap.level === 'atomic' ? 'bg-green-50 text-green-600' : 'bg-purple-50 text-purple-600'">
+          {{ cap.level === 'atomic' ? '⚛️ 原子' : '🧩 组合' }}
+        </span>
         <span v-if="cap.category" class="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">{{ cap.category }}</span>
         <span v-if="cap.tags && cap.tags.length" class="px-2 py-0.5 bg-primary-50 text-primary-600 text-xs rounded-full">{{ cap.tags[0] }}</span>
       </div>

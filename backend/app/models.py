@@ -1,5 +1,6 @@
-"""Database models and session management"""
-from sqlalchemy import create_engine, Column, Integer, String, Text, Float, Text as JSONText
+"""Database models and session management (v2.0)"""
+
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from .config import DATABASE_URL
@@ -16,8 +17,10 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(128), nullable=False)
     role = Column(String(20), nullable=False)  # customer / developer / admin
-    balance = Column(Float, default=0.0)
-    earnings = Column(Float, default=0.0)
+    balance = Column(Float, default=0.0)                     # 可用余额
+    frozen_balance = Column(Float, default=0.0)              # 🔒 冻结中的金额
+    earnings = Column(Float, default=0.0)                    # 开发者可提现余额
+    free_quota_used = Column(Text, default="{}")             # 🔒 JSON: {cap_id: today_count}
     status = Column(String(20), default="active")
     created_at = Column(String(30), default="")
 
@@ -31,15 +34,21 @@ class Capability(Base):
     version = Column(String(20), default="1.0.0")
     category = Column(String(50))
     subcategory = Column(String(50))
-    tags = Column(Text)  # JSON array
+    level = Column(String(20), default="atomic")            # atomic / composite
+    tags = Column(Text)                                      # JSON array
     description = Column(Text)
     long_description = Column(Text)
-    status = Column(String(20), default="draft", index=True)
-    pricing_model = Column(String(20))  # per_call / monthly / freemium / bundle
+    status = Column(String(20), default="draft", index=True) # draft/submitted/approved/rejected/published/suspended
+    pricing_model = Column(String(20))                       # per_call / monthly / freemium / bundle
     price = Column(Float, default=0.0)
-    llm_mode = Column(String(20), default="platform")
-    runtime_config = Column(Text)  # JSON
-    interfaces_config = Column(Text)  # JSON
+    llm_mode = Column(String(20), default="platform")        # platform / self_key
+    runtime_config = Column(Text)                            # JSON
+    interfaces_config = Column(Text)                         # JSON
+    dependencies = Column(Text, default="[]")                # 🔒 JSON: [{cap_id, version, required}]
+    grayscale = Column(Float, default=1.0)                   # 🔒 灰度比例 0.0~1.0
+    health_status = Column(String(20), default="healthy")    # 🔒 healthy/degraded/down
+    encrypted = Column(Integer, default=0)                   # 🔒 能力包是否加密存储
+    review_checklist = Column(Text)                          # 🔒 JSON: 审核检查清单结果
     download_count = Column(Integer, default=0)
     call_count = Column(Integer, default=0)
     avg_rating = Column(Float, default=0.0)
@@ -66,6 +75,7 @@ class Subscription(Base):
     capability_id = Column(Integer, nullable=False, index=True)
     status = Column(String(20), default="active")
     api_key = Column(String(64), unique=True, index=True)
+    locked_version = Column(String(20))                      # 🔒 锁定的版本，NULL=跟随最新
     started_at = Column(String(30), default="")
     expires_at = Column(String(30), default="")
 
@@ -75,14 +85,18 @@ class CallLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     subscription_id = Column(Integer, index=True)
     capability_id = Column(Integer, index=True)
+    customer_id = Column(Integer, index=True)
     session_id = Column(String(36))
+    trace_id = Column(String(64), index=True)                # 🔒 调用链追踪
+    parent_call_id = Column(Integer, default=0)              # 🔒 父调用（组合能力）
+    mode = Column(String(20), default="cloud")               # 🔒 cloud / bridge
     input_summary = Column(Text)
     output_summary = Column(Text)
     tool_calls = Column(Integer, default=0)
     duration_ms = Column(Integer, default=0)
     token_input = Column(Integer, default=0)
     token_output = Column(Integer, default=0)
-    status = Column(String(20))  # success / error / timeout
+    status = Column(String(20))                              # success / error / timeout
     charged = Column(Float, default=0.0)
     created_at = Column(String(30), default="")
 
@@ -91,12 +105,12 @@ class Invoice(Base):
     __tablename__ = "invoices"
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False, index=True)
-    type = Column(String(20))  # charge / payout
+    type = Column(String(20))                                # charge / payout
     amount = Column(Float)
     status = Column(String(20), default="pending")
     period_start = Column(String(30))
     period_end = Column(String(30))
-    detail = Column(Text)  # JSON
+    detail = Column(Text)
     created_at = Column(String(30), default="")
 
 
@@ -126,14 +140,83 @@ class ChatSession(Base):
     user_id = Column(Integer, nullable=False, index=True)
     capability_id = Column(Integer, nullable=False, index=True)
     status = Column(String(20), default="active")
-    context = Column(Text)  # JSON: conversation history
+    context = Column(Text)
+    created_at = Column(String(30), default="")
+    updated_at = Column(String(30), default="")
+
+
+class CustomerConfig(Base):
+    """客户配置（加密存储）"""
+    __tablename__ = "customer_configs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    customer_id = Column(Integer, nullable=False, index=True)
+    config_key = Column(String(100), nullable=False)
+    config_value = Column(Text, nullable=False)
+    encrypted = Column(Integer, default=1)
+    created_at = Column(String(30), default="")
+    updated_at = Column(String(30), default="")
+
+
+class Webhook(Base):
+    """Webhook 配置"""
+    __tablename__ = "webhooks"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    customer_id = Column(Integer, nullable=False, index=True)
+    url = Column(String(500), nullable=False)
+    events = Column(Text, default="[]")
+    secret = Column(String(64))
+    status = Column(String(20), default="active")
+    created_at = Column(String(30), default="")
+
+
+class Announcement(Base):
+    """系统公告"""
+    __tablename__ = "announcements"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(200), nullable=False)
+    content = Column(Text)
+    type = Column(String(20), default="info")
+    target = Column(String(20), default="all")
+    created_at = Column(String(30), default="")
+    expires_at = Column(String(30), default="")
+
+
+class BridgeSession(Base):
+    """桥接会话"""
+    __tablename__ = "bridge_sessions"
+    id = Column(String(36), primary_key=True)
+    customer_id = Column(Integer, nullable=False, index=True)
+    capability_id = Column(Integer, nullable=False)
+    status = Column(String(20), default="active")
+    allowed_tools = Column(Text, default="[]")               # JSON: 允许的工具白名单
+    context = Column(Text)                                   # JSON: 对话上下文 + 工具调用历史
+    last_activity = Column(BigInteger, default=0)            # 时间戳 ms
     created_at = Column(String(30), default="")
     updated_at = Column(String(30), default="")
 
 
 def init_db():
     """Create all tables"""
+    from .utils.helpers import now_timestamp
+    from .auth import hash_password
     Base.metadata.create_all(bind=engine)
+
+    # 创建默认管理员
+    db = SessionLocal()
+    try:
+        if not db.query(User).filter(User.username == "admin").first():
+            admin = User(
+                username="admin",
+                email="admin@agenthub.wang",
+                password_hash=hash_password("admin123"),
+                role="admin",
+                balance=0,
+                created_at=now_timestamp(),
+            )
+            db.add(admin)
+            db.commit()
+    finally:
+        db.close()
 
 
 def get_db():
