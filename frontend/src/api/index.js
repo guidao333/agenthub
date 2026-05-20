@@ -95,8 +95,50 @@ export const adminAPI = {
   approve: (capId) => api.post(`/admin/reviews/${capId}/approve`),
   reject: (capId) => api.post(`/admin/reviews/${capId}/reject`),
   users: (params) => api.get('/admin/users', { params }),
+  suspendUser: (uid) => api.post(`/admin/users/${uid}/suspend`),
+  activateUser: (uid) => api.post(`/admin/users/${uid}/activate`),
   finance: () => api.get('/admin/finance/overview'),
+  withdrawals: (status) => api.get('/admin/finance/withdrawals', { params: { status } }),
+  approveWithdrawal: (wid) => api.post(`/admin/finance/withdrawals/${wid}/approve`),
+  rejectWithdrawal: (wid) => api.post(`/admin/finance/withdrawals/${wid}/reject`),
   stats: () => api.get('/admin/stats'),
+  // Categories
+  categories: () => api.get('/admin/categories'),
+  createCategory: (data) => api.post('/admin/categories', data),
+  updateCategory: (catId, data) => api.put(`/admin/categories/${catId}`, data),
+  deleteCategory: (catId) => api.delete(`/admin/categories/${catId}`),
+  // Capabilities
+  listCaps: (params) => api.get('/admin/capabilities', { params }),
+  createCap: (data) => api.post('/admin/capabilities', data),
+  updateCap: (capId, data) => api.put(`/admin/capabilities/${capId}`, data),
+  deleteCap: (capId) => api.delete(`/admin/capabilities/${capId}`),
+  // Pricing
+  updatePricing: (capId, data) => api.put(`/admin/pricing/${capId}`, data),
+  batchPricing: (data) => api.post('/admin/pricing/batch', data),
+}
+
+// Vision AI
+export const visionAPI = {
+  // 设备
+  devices: () => api.get('/vision/devices'),
+  registerDevice: (data) => api.post('/vision/devices', data),
+  deleteDevice: (id) => api.delete(`/vision/devices/${id}`),
+  // 摄像头
+  cameras: (deviceId) => api.get('/vision/cameras', { params: { device_id: deviceId } }),
+  addCamera: (data) => api.post('/vision/cameras', data),
+  // 事件
+  events: (params) => api.get('/vision/events', { params }),
+  acknowledgeEvent: (id) => api.post(`/vision/events/${id}/acknowledge`),
+  // 通知渠道
+  channels: () => api.get('/vision/notify/channels'),
+  addChannel: (data) => api.post('/vision/notify/channels', data),
+  testChannel: (id) => api.post(`/vision/notify/test/${id}`),
+  // 规则
+  rules: (capability) => api.get('/vision/rules', { params: { capability } }),
+  createRule: (data) => api.post('/vision/rules', data),
+  updateRule: (id, data) => api.put(`/vision/rules/${id}`, data),
+  // 统计
+  stats: (deviceId) => api.get('/vision/stats', { params: { device_id: deviceId } }),
 }
 
 export default api

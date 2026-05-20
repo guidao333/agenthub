@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Hero -->
-    <div class="bg-gradient-to-r from-primary-600 via-primary-500 to-blue-400 text-white">
+    <!-- Hero (only on home) -->
+    <div v-if="!selectedCat" class="bg-gradient-to-r from-primary-600 via-primary-500 to-blue-400 text-white">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 class="text-4xl font-bold mb-3">AI 能力市场</h1>
         <p class="text-lg text-blue-100 mb-6">发现、订阅、使用 AI Agent 能力 — 让智能触手可及</p>
@@ -12,37 +12,67 @@
       </div>
     </div>
 
-    <!-- Category Navigation -->
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6">
-      <div class="bg-white rounded-xl shadow-md overflow-hidden">
-        <!-- Level 1: Main categories -->
-        <div class="flex border-b border-gray-100">
-          <button @click="clearCategory"
-            class="px-5 py-3 text-sm font-medium transition border-b-2"
-            :class="!selectedCat && !selectedSub ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-600 hover:text-gray-900'">
-            全部
-          </button>
-          <button v-for="cat in categoryTree" :key="cat.id" @click="selectCat(cat)"
-            class="px-5 py-3 text-sm font-medium transition border-b-2 whitespace-nowrap"
-            :class="selectedCat === cat.id ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-600 hover:text-gray-900'">
-            <span class="mr-1">{{ cat.icon }}</span>
-            {{ cat.name }}
-            <span v-if="cat.count" class="ml-1 text-xs text-gray-400">({{ cat.count }})</span>
-          </button>
+    <!-- ══════ 首页：大分类卡片 ══════ -->
+    <div v-if="!selectedCat" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Hot capabilities -->
+      <section v-if="hotCaps.length" class="mb-10">
+        <h3 class="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">🔥 热门能力</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          <CapabilityCard v-for="cap in hotCaps" :key="cap.cap_id" :cap="cap" @click="goDetail(cap.cap_id)" />
         </div>
-        <!-- Level 2: Subcategories -->
-        <div v-if="activeSubcategories.length" class="flex gap-1 px-4 py-2 bg-gray-50 flex-wrap">
-          <button v-for="sub in activeSubcategories" :key="sub.id" @click="selectSub(sub)"
-            class="px-3 py-1.5 rounded-lg text-xs font-medium transition"
-            :class="selectedSub === sub.id ? 'bg-primary-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'">
-            {{ sub.name }}
-            <span v-if="sub.count" class="ml-1 opacity-70">({{ sub.count }})</span>
-          </button>
+      </section>
+
+      <!-- Category Cards -->
+      <h3 class="text-base font-semibold text-gray-800 mb-4">📂 能力分类</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div v-for="cat in categoryTree" :key="cat.id"
+          @click="selectCat(cat)"
+          class="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-lg hover:border-primary-300 transition-all cursor-pointer group">
+          <div class="flex items-center gap-4 mb-3">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl" :style="{ backgroundColor: cat.color + '15', color: cat.color }">
+              {{ cat.icon }}
+            </div>
+            <div class="flex-1">
+              <h2 class="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">{{ cat.name }}</h2>
+              <p class="text-sm text-gray-500">{{ cat.count }} 个能力</p>
+            </div>
+            <svg class="w-5 h-5 text-gray-400 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </div>
+          <p class="text-sm text-gray-600 mb-4">{{ cat.description }}</p>
+          <div class="flex flex-wrap gap-1.5">
+            <span v-for="sub in cat.subcategories" :key="sub.id"
+              class="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+              {{ sub.name }}<span v-if="sub.count" class="text-gray-400 ml-0.5">{{ sub.count }}</span>
+            </span>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <!-- ══════ 分类详情页 ══════ -->
+    <div v-if="selectedCat" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <!-- Breadcrumb -->
+      <div class="flex items-center gap-2 mb-4 text-sm">
+        <button @click="clearCategory" class="text-primary-600 hover:text-primary-700 font-medium">← 全部分类</button>
+        <span class="text-gray-400">/</span>
+        <span class="text-gray-900 font-medium">{{ currentCatInfo.icon }} {{ currentCatInfo.name }}</span>
+      </div>
+
+      <!-- Subcategory tabs -->
+      <div class="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-6 flex-wrap">
+        <button @click="selectedSub = ''; currentPage = 1; loadCaps()"
+          class="px-4 py-2 rounded-lg text-sm font-medium transition"
+          :class="!selectedSub ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+          全部 ({{ currentCatInfo.count }})
+        </button>
+        <button v-for="sub in activeSubcategories" :key="sub.id" @click="toggleSub(sub.id)"
+          class="px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap"
+          :class="selectedSub === sub.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+          {{ sub.name }}
+          <span class="text-xs opacity-60 ml-1">{{ sub.count }}</span>
+        </button>
+      </div>
+
       <!-- Filter bar -->
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div class="flex items-center gap-2 flex-wrap">
@@ -50,23 +80,16 @@
             {{ currentTitle }}
             <span v-if="total" class="text-sm font-normal text-gray-500 ml-1">共 {{ total }} 个</span>
           </h2>
-          <!-- Level filter pills -->
           <div class="flex gap-1 ml-2">
             <button @click="toggleLevel('')"
               class="px-2.5 py-0.5 rounded-full text-xs transition"
-              :class="!selectedLevel ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">
-              全部
-            </button>
+              :class="!selectedLevel ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">全部</button>
             <button @click="toggleLevel('atomic')"
               class="px-2.5 py-0.5 rounded-full text-xs transition"
-              :class="selectedLevel === 'atomic' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">
-              ⚛️ 原子能力
-            </button>
+              :class="selectedLevel === 'atomic' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">⚛️ 原子能力</button>
             <button @click="toggleLevel('composite')"
               class="px-2.5 py-0.5 rounded-full text-xs transition"
-              :class="selectedLevel === 'composite' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">
-              🧩 组合能力
-            </button>
+              :class="selectedLevel === 'composite' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">🧩 组合能力</button>
           </div>
         </div>
         <div class="flex gap-1">
@@ -77,16 +100,6 @@
           </button>
         </div>
       </div>
-
-      <!-- Hot capabilities (only when no filters) -->
-      <section v-if="hotCaps.length && !searchQuery && !selectedCat && !selectedSub && !selectedLevel" class="mb-8">
-        <h3 class="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          🔥 热门能力
-        </h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          <CapabilityCard v-for="cap in hotCaps" :key="cap.cap_id" :cap="cap" @click="goDetail(cap.cap_id)" />
-        </div>
-      </section>
 
       <!-- Capability Grid -->
       <div v-if="caps.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -113,13 +126,30 @@
         </button>
       </div>
     </div>
+
+    <!-- 搜索结果页 -->
+    <div v-if="searchQuery && !selectedCat" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-gray-900">
+          搜索 "{{ searchQuery }}"
+          <span v-if="total" class="text-sm font-normal text-gray-500 ml-1">共 {{ total }} 个</span>
+        </h2>
+        <button @click="searchQuery = ''; loadCaps()" class="text-sm text-gray-500 hover:text-gray-700">清除搜索</button>
+      </div>
+      <div v-if="caps.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <CapabilityCard v-for="cap in caps" :key="cap.cap_id" :cap="cap" @click="goDetail(cap.cap_id)" />
+      </div>
+      <div v-else-if="!loading" class="text-center py-20 text-gray-400">
+        <p class="text-lg">未找到相关能力</p>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { marketAPI, configAPI } from '../api'
+import { marketAPI } from '../api'
 import CapabilityCard from '../components/CapabilityCard.vue'
 
 const router = useRouter()
@@ -145,30 +175,25 @@ const sorts = [
 
 const totalPages = computed(() => Math.ceil(total.value / pageSize))
 
-const activeSubcategories = computed(() => {
-  if (!selectedCat.value) return []
-  const cat = categoryTree.value.find(c => c.id === selectedCat.value)
-  return cat?.subcategories || []
+const currentCatInfo = computed(() => {
+  if (!selectedCat.value) return {}
+  return categoryTree.value.find(c => c.id === selectedCat.value) || {}
 })
+
+const activeSubcategories = computed(() => currentCatInfo.value?.subcategories || [])
 
 const currentTitle = computed(() => {
   if (selectedSub.value) {
-    const cat = categoryTree.value.find(c => c.id === selectedCat.value)
-    return cat?.subcategories?.find(s => s.id === selectedSub.value)?.name || '全部能力'
+    return activeSubcategories.value.find(s => s.id === selectedSub.value)?.name || '全部能力'
   }
-  if (selectedCat.value) {
-    return categoryTree.value.find(c => c.id === selectedCat.value)?.name || '全部能力'
-  }
-  return '全部能力'
+  return currentCatInfo.value?.name || '全部能力'
 })
 
 async function loadCategories() {
   try {
     const { data } = await marketAPI.categories()
     categoryTree.value = data
-  } catch {
-    categoryTree.value = []
-  }
+  } catch { categoryTree.value = [] }
 }
 
 async function loadHot() {
@@ -181,11 +206,7 @@ async function loadHot() {
 async function loadCaps() {
   loading.value = true
   try {
-    const params = {
-      page: currentPage.value,
-      size: pageSize,
-      sort: currentSort.value,
-    }
+    const params = { page: currentPage.value, size: pageSize, sort: currentSort.value }
     if (searchQuery.value) params.search = searchQuery.value
     if (selectedCat.value && !selectedSub.value) params.category = selectedCat.value
     if (selectedSub.value) params.subcategory = selectedSub.value
@@ -193,40 +214,30 @@ async function loadCaps() {
     const { data } = await marketAPI.list(params)
     caps.value = data.items || []
     total.value = data.total || 0
-  } catch {
-    caps.value = []
-    total.value = 0
-  } finally {
-    loading.value = false
-  }
+  } catch { caps.value = []; total.value = 0 }
+  finally { loading.value = false }
 }
 
-function doSearch() {
-  currentPage.value = 1
-  loadCaps()
-}
+function doSearch() { currentPage.value = 1; loadCaps() }
 
 function clearCategory() {
   selectedCat.value = ''
   selectedSub.value = ''
-  currentPage.value = 1
-  loadCaps()
+  selectedLevel.value = ''
+  caps.value = []
+  total.value = 0
 }
 
 function selectCat(cat) {
-  if (selectedCat.value === cat.id) {
-    selectedCat.value = ''
-    selectedSub.value = ''
-  } else {
-    selectedCat.value = cat.id
-    selectedSub.value = ''
-  }
+  selectedCat.value = cat.id
+  selectedSub.value = ''
+  selectedLevel.value = ''
   currentPage.value = 1
   loadCaps()
 }
 
-function selectSub(sub) {
-  selectedSub.value = selectedSub.value === sub.id ? '' : sub.id
+function toggleSub(subId) {
+  selectedSub.value = selectedSub.value === subId ? '' : subId
   currentPage.value = 1
   loadCaps()
 }
@@ -237,16 +248,13 @@ function toggleLevel(level) {
   loadCaps()
 }
 
-function goDetail(capId) {
-  router.push({ name: 'capability', params: { capId } })
-}
+function goDetail(capId) { router.push({ name: 'capability', params: { capId } }) }
 
-watch([currentSort], () => { currentPage.value = 1; loadCaps() })
-watch(currentPage, loadCaps)
+watch([currentSort], () => { currentPage.value = 1; if (selectedCat.value) loadCaps() })
+watch(currentPage, () => { if (selectedCat.value) loadCaps() })
 
 onMounted(() => {
   loadCategories()
   loadHot()
-  loadCaps()
 })
 </script>

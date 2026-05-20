@@ -63,8 +63,8 @@ async function handleLogin() {
   error.value = ''
   loading.value = true
   try {
-    const { data } = await authAPI.login(form)
-    setAuth(data)
+    const { data: resp } = await authAPI.login(form)
+    setAuth(resp)
     const redirect = route.query.redirect || '/'
     router.push(redirect)
   } catch (e) {

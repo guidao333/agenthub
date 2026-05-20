@@ -1,0 +1,20 @@
+[Unit]
+Description=AgentHub API Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/agenthub/backend
+ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --log-level info
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/agenthub/logs/agenthub.log
+StandardError=append:/opt/agenthub/logs/agenthub.log
+Environment=DEEPSEEK_API_KEY=sk-1122e60818c0437c9dbfeda8e7fd18c2
+Environment=SECRET_KEY=agenthub-secret-key-change-in-production-2026
+Environment=DATABASE_URL=sqlite:////opt/agenthub/data/agenthub.db
+# 慢启动容忍（fastapi 导入需 ~20s, systemd 默认 90s）
+
+[Install]
+WantedBy=multi-user.target

@@ -14,7 +14,7 @@ from .models import init_db
 from .middleware.request_log import request_logging
 from .middleware.rate_limit import rate_limit_middleware, rate_limiter
 from .middleware.error_handler import error_handler
-from .routes import auth, market, chat, developer, admin, dashboard, api_call, config, billing, bridge
+from .routes import auth, market, chat, developer, admin, admin_manage, dashboard, api_call, config, billing, bridge, vision
 
 # ── Logging ──
 os.makedirs(LOGS_DIR, exist_ok=True)
@@ -78,10 +78,16 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(bridge.router, prefix="/api/v1/bridge")
 app.include_router(developer.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(admin_manage.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(api_call.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(billing.router, prefix="/api")
+app.include_router(vision.router, prefix="/api")
+
+# Init vision tables
+from .routes.vision import init_vision_tables as _init_vision
+_init_vision()
 
 
 # ── Root ──
@@ -96,7 +102,7 @@ def root():
     }
 
 
-@app.get("/health")
+@app.get("/api/health")
 def health():
     return {
         "status": "ok",

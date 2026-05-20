@@ -42,51 +42,35 @@ class CapabilityDetail(CapabilityListItem):
 
 @router.get("/categories")
 def list_categories(db: Session = Depends(get_db)):
-    """Get full category tree with counts from config + DB stats"""
-    from pathlib import Path
-    import yaml as _yaml
-
-    yaml_path = Path(__file__).resolve().parent.parent.parent.parent / "config" / "categories.yaml"
-    if yaml_path.exists():
-        with open(yaml_path, "r", encoding="utf-8") as f:
-            cfg = _yaml.safe_load(f)
-    else:
-        cfg = {"categories": []}
-
-    # Get counts from DB
+    """Get full category tree from database"""
+    from ..models import Category
     from sqlalchemy import func
+
+    parents = db.query(Category).filter(Category.parent_id == 0).order_by(Category.sort_order).all()
+    
     cap_counts = dict(
         db.query(Capability.category, func.count(Capability.id))
         .filter(Capability.status == "published")
-        .group_by(Capability.category)
-        .all()
+        .group_by(Capability.category).all()
     )
-    subcap_counts = dict(
+    sub_counts = dict(
         db.query(Capability.subcategory, func.count(Capability.id))
         .filter(Capability.status == "published")
-        .group_by(Capability.subcategory)
-        .all()
+        .group_by(Capability.subcategory).all()
     )
 
     result = []
-    for cat in cfg.get("categories", []):
-        cat_item = {
-            "id": cat["id"],
-            "name": cat["name"],
-            "icon": cat.get("icon", "📦"),
-            "description": cat.get("description", ""),
-            "color": cat.get("color", "#6B7280"),
-            "count": cap_counts.get(cat["id"], 0),
-            "subcategories": [],
-        }
-        for sub in cat.get("subcategories", []):
-            cat_item["subcategories"].append({
-                "id": sub["id"],
-                "name": sub["name"],
-                "description": sub.get("description", ""),
-                "count": subcap_counts.get(sub["id"], 0),
-            })
-        result.append(cat_item)
+    for p in parents:
+        subs = db.query(Category).filter(Category.parent_id == p.id).order_by(Category.sort_order).all()
+        sub_list = [{
+            "id": s.cat_id, "name": s.name, "description": s.description,
+            "count": sub_counts.get(s.cat_id, 0),
+        } for s in subs]
+        result.append({
+            "id": p.cat_id, "name": p.name, "icon": p.icon,
+            "color": p.color, "description": p.description,
+            "count": cap_counts.get(p.cat_id, 0), "subcategories": sub_list,
+        })
     return result
 
 

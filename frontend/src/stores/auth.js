@@ -11,11 +11,12 @@ const isAdmin = computed(() => role.value === 'admin')
 
 function setAuth(data) {
   token.value = data.access_token
-  role.value = data.role
-  username.value = data.username
+  const user = data.user || data
+  role.value = user.role || data.role || ''
+  username.value = user.username || data.username || ''
   localStorage.setItem('token', data.access_token)
-  localStorage.setItem('role', data.role)
-  localStorage.setItem('username', data.username)
+  localStorage.setItem('role', role.value)
+  localStorage.setItem('username', username.value)
 }
 
 function clearAuth() {

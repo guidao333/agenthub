@@ -195,6 +195,21 @@ class BridgeSession(Base):
     updated_at = Column(String(30), default="")
 
 
+class Category(Base):
+    """能力分类"""
+    __tablename__ = "categories"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cat_id = Column(String(100), unique=True, nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    icon = Column(String(20), default='')
+    color = Column(String(20), default='#6B7280')
+    description = Column(Text, default='')
+    sort_order = Column(Integer, default=0)
+    parent_id = Column(Integer, default=0)  # 0=顶级分类, >0=子分类的parent id
+    created_at = Column(String(30), default='')
+    updated_at = Column(String(30), default='')
+
+
 def init_db():
     """Create all tables"""
     from .utils.helpers import now_timestamp

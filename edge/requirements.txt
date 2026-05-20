@@ -1,0 +1,22 @@
+# AgentHub Edge - AI视觉推理盒子依赖
+# 跨平台: Windows / Linux / macOS
+
+# 核心AI
+ultralytics>=8.0.0          # YOLOv8 推理
+opencv-python>=4.8.0        # 视频处理 + RTSP取流
+numpy>=1.24.0               # 数值计算
+Pillow>=10.0.0              # 图像处理
+
+# 网络通信
+requests>=2.31.0            # HTTP API调用
+httpx>=0.25.0               # 异步HTTP（通知推送）
+websockets>=12.0            # WebSocket（可选实时推送）
+
+# ONVIF发现
+onvif-zeep>=0.2.12          # ONVIF协议（可选，纯socket发现不依赖此库）
+
+# 系统监控
+psutil>=5.9.0               # CPU/内存监控
+
+# 打包工具（开发用）
+pyinstaller>=6.0.0          # 打包成可执行文件

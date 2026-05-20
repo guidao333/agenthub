@@ -24,6 +24,33 @@ class SendMessageRequest(BaseModel):
     message: str
 
 
+
+@router.get("/sessions")
+def list_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List user's chat sessions"""
+    from ..models import ChatSession, Capability
+    sessions = db.query(ChatSession).filter(
+        ChatSession.user_id == current_user.id,
+        ChatSession.status == "active",
+    ).order_by(ChatSession.updated_at.desc()).limit(50).all()
+
+    result = []
+    for s in sessions:
+        cap = db.query(Capability).filter(Capability.id == s.capability_id).first()
+        result.append({
+            "id": s.id,
+            "capability_id": s.capability_id,
+            "capability_name": cap.name if cap else "unknown",
+            "status": s.status,
+            "created_at": s.created_at,
+            "updated_at": s.updated_at,
+        })
+    return result
+
+
 @router.post("/sessions")
 def create_session(
     req: CreateSessionRequest,

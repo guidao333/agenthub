@@ -89,8 +89,10 @@ async function handleRegister() {
   error.value = ''
   loading.value = true
   try {
-    const { data } = await authAPI.register(form)
-    setAuth(data)
+    await authAPI.register(form)
+    // Auto login after register
+    const { data: loginData } = await authAPI.login({ username: form.username, password: form.password })
+    setAuth(loginData)
     router.push('/')
   } catch (e) {
     error.value = e.response?.data?.detail || '注册失败，请稍后重试'
