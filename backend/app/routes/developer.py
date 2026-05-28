@@ -59,12 +59,26 @@ def list_my_capabilities(
         Capability.developer_id == current_user.id
     ).order_by(Capability.created_at.desc()).all()
 
+    def parse_json(value, fallback):
+        if not value:
+            return fallback
+        try:
+            return json.loads(value)
+        except Exception:
+            return fallback
+
     return [{
         "id": c.id,
         "cap_id": c.cap_id,
         "name": c.name,
         "version": c.version,
+        "description": c.description,
+        "long_description": c.long_description,
         "category": c.category,
+        "subcategory": c.subcategory,
+        "level": c.level,
+        "tags": parse_json(c.tags, []),
+        "dependencies": parse_json(c.dependencies, []),
         "status": c.status,
         "pricing_model": c.pricing_model,
         "price": c.price,

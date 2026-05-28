@@ -156,7 +156,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     access_token = create_access_token({"sub": user.username, "role": user.role})
     refresh_token = create_refresh_token({"sub": user.username})
 
-    return api_response(data={
+    return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
@@ -167,7 +167,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             "role": user.role,
             "balance": user.balance,
         },
-    })
+    }
 
 
 @router.post("/auth/refresh")

@@ -68,6 +68,7 @@ export const dashboardAPI = {
   recharge: (amount) => api.post('/dashboard/recharge', { amount }),
   apiKeys: () => api.get('/dashboard/api-keys'),
   createApiKey: (subscription_id) => api.post('/dashboard/api-keys', { subscription_id }),
+  clientStatus: () => api.get('/dashboard/client-status'),
 }
 
 // Config
@@ -84,9 +85,16 @@ export const developerAPI = {
   create: (data) => api.post('/developer/capabilities', data),
   update: (capId, data) => api.put(`/developer/capabilities/${capId}`, data),
   submit: (capId) => api.post(`/developer/capabilities/${capId}/submit`),
+  uploadVersion: (capId, data) => {
+    const form = new FormData()
+    form.append('version', data.version)
+    form.append('changelog', data.changelog || '')
+    form.append('package', data.package)
+    return api.post(`/developer/capabilities/${capId}/versions`, form)
+  },
   earnings: () => api.get('/developer/earnings'),
   earningsDetail: () => api.get('/developer/earnings/detail'),
-  withdraw: (amount) => api.post('/developer/withdraw', { amount }),
+  withdraw: (amount) => api.post('/developer/withdraw', null, { params: { amount } }),
 }
 
 // Admin

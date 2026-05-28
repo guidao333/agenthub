@@ -230,8 +230,31 @@ def init_db():
             )
             db.add(admin)
             db.commit()
+        _sync_builtin_capability_metadata(db)
     finally:
         db.close()
+
+
+def _sync_builtin_capability_metadata(db):
+    """Keep official capability metadata aligned after deployments."""
+
+    changed = False
+    builtin_prices = {
+        "isp-smart-cs": {"pricing_model": "monthly", "price": 499.0},
+        "ai-smart-monitor": {"pricing_model": "monthly", "price": 990.0},
+    }
+    for cap_id, meta in builtin_prices.items():
+        cap = db.query(Capability).filter(Capability.cap_id == cap_id).first()
+        if not cap:
+            continue
+        if cap.pricing_model != meta["pricing_model"]:
+            cap.pricing_model = meta["pricing_model"]
+            changed = True
+        if float(cap.price or 0) != meta["price"]:
+            cap.price = meta["price"]
+            changed = True
+    if changed:
+        db.commit()
 
 
 def get_db():

@@ -1,15 +1,36 @@
 """Market routes: browse, search, subscribe capabilities"""
 from datetime import datetime, timezone
 import json
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from ..models import get_db, Capability, Subscription, Review, User
 from ..auth import get_current_user
+from ..config import SECRET_KEY, ALGORITHM
+from jose import JWTError, jwt
 import secrets
 
 router = APIRouter(prefix="/market", tags=["market"])
+
+
+def get_optional_user(
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db),
+) -> User | None:
+    token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            return None
+    except JWTError:
+        return None
+    return db.query(User).filter(User.username == username, User.status == "active").first()
 
 
 class CapabilityListItem(BaseModel):
@@ -141,7 +162,11 @@ def list_capabilities(
 
 
 @router.get("/capabilities/{cap_id}")
-def get_capability(cap_id: str, db: Session = Depends(get_db)):
+def get_capability(
+    cap_id: str,
+    current_user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
     """Get capability detail"""
     cap = db.query(Capability).filter(Capability.cap_id == cap_id).first()
     if not cap and cap_id.isdigit():
@@ -151,6 +176,13 @@ def get_capability(cap_id: str, db: Session = Depends(get_db)):
 
     dev = db.query(User).filter(User.id == cap.developer_id).first()
     reviews = db.query(Review).filter(Review.capability_id == cap.id).order_by(Review.created_at.desc()).limit(10).all()
+    active_subscription = None
+    if current_user:
+        active_subscription = db.query(Subscription).filter(
+            Subscription.customer_id == current_user.id,
+            Subscription.capability_id == cap.id,
+            Subscription.status == "active",
+        ).first()
 
     return {
         "id": cap.id,
@@ -173,6 +205,8 @@ def get_capability(cap_id: str, db: Session = Depends(get_db)):
         "published_at": cap.published_at,
         "developer_name": dev.username if dev else None,
         "reviews": [{"rating": r.rating, "comment": r.comment, "created_at": r.created_at} for r in reviews],
+        "is_subscribed": bool(active_subscription),
+        "subscription_id": active_subscription.id if active_subscription else None,
     }
 
 
@@ -201,8 +235,8 @@ def subscribe_capability(
     db: Session = Depends(get_db),
 ):
     """Subscribe to a capability"""
-    if current_user.role != "customer":
-        raise HTTPException(403, "Only customers can subscribe")
+    if current_user.role not in ("customer", "admin"):
+        raise HTTPException(403, "Only customers and admins can subscribe")
 
     cap = db.query(Capability).filter(Capability.cap_id == cap_id).first()
     if not cap or cap.status != "published":
@@ -225,7 +259,7 @@ def subscribe_capability(
         started_at=now,
     )
     db.add(sub)
-    cap.download_count += 1
+    cap.download_count = (cap.download_count or 0) + 1
     db.commit()
     db.refresh(sub)
 

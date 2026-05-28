@@ -1,4 +1,4 @@
-"""AgentHub FastAPI Application v2.0"""
+"""AgentHub FastAPI Application v2.1 — 统一能力架构"""
 
 import time
 import logging
@@ -29,29 +29,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger("agenthub")
 
-# ── Health Monitor (background) ──
-_health_task = None
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / Shutdown"""
-    # ── Startup ──
     init_db()
     logger.info(f"✓ Database initialized at {DATA_DIR}/agenthub.db")
-    logger.info(f"✓ AgentHub v2.0 started")
+
+    # Init vision tables
+    from .routes.vision import init_vision_tables as _init_vision
+    _init_vision()
+
+    # Init capability config tables
+    from .routes.cap_config import init_config_tables as _init_config
+    _init_config()
+
+    logger.info(f"✓ AgentHub v2.1 started (unified capability architecture)")
 
     yield
 
-    # ── Shutdown ──
     logger.info("AgentHub shutting down")
 
 
 # ── FastAPI App ──
 app = FastAPI(
     title="AgentHub",
-    description="Agent Capability Marketplace Platform v2.0",
-    version="2.0.0",
+    description="Agent Capability Marketplace Platform v2.1",
+    version="2.1.0",
     lifespan=lifespan,
 )
 
@@ -85,9 +89,12 @@ app.include_router(config.router, prefix="/api")
 app.include_router(billing.router, prefix="/api")
 app.include_router(vision.router, prefix="/api")
 
-# Init vision tables
-from .routes.vision import init_vision_tables as _init_vision
-_init_vision()
+# ── v2.1 新增：统一能力架构 ──
+from .routes import ws_client, cap_config, cap_chat_engine
+
+app.include_router(ws_client.router)        # WebSocket /ws/client
+app.include_router(cap_config.router, prefix="/api")   # 能力配置 /api/cap-config/*
+app.include_router(cap_chat_engine.router, prefix="/api")  # 能力对话 /api/capability-chat/*
 
 
 # ── Root ──
@@ -95,7 +102,7 @@ _init_vision()
 def root():
     return {
         "name": "AgentHub",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "status": "running",
         "docs": "/docs",
         "site": "https://www.agenthub.wang",
@@ -106,6 +113,6 @@ def root():
 def health():
     return {
         "status": "ok",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "llm_configured": bool(DEEPSEEK_API_KEY),
     }

@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "entry.py", line 28, in <module>
+  File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1342, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 938, in _load_unlocked
+  File "pyimod02_importers.py", line 457, in exec_module
+  File "main.py", line 39, in <module>
+  File "logging\__init__.py", line 1219, in __init__
+  File "logging\__init__.py", line 1248, in _open
+FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Administrator\\AppData\\Roaming\\AgentHub\\Edge\\edge.log'
+[PYI-23068:ERROR] Failed to execute script 'entry' due to unhandled exception!

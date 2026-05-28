@@ -9,7 +9,7 @@ const routes = [
   { path: '/chat/:sessionId?', name: 'chat', component: () => import('../views/ChatWindow.vue'), meta: { auth: true } },
   { path: '/developer', name: 'developer', component: () => import('../views/DeveloperPortal.vue'), meta: { auth: true, roles: ['developer', 'admin'] } },
   { path: '/admin', name: 'admin', component: () => import('../views/AdminPanel.vue'), meta: { auth: true, role: 'admin' } },
-  { path: '/vision', name: 'vision', component: () => import('../views/VisionPanel.vue'), meta: { auth: true, role: 'admin' } },,
+  { path: '/vision', name: 'vision', component: () => import('../views/VisionPanel.vue'), meta: { auth: true, role: 'admin' } },
 ]
 
 const router = createRouter({
