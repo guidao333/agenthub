@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<script>
+(function() {
+  var cap = new URLSearchParams(window.location.search).get('cap') || 'isp-smart-cs';
+  window.location.replace('/cap-config/' + cap);
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentHub 能力配置</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { min-height: 100vh; background: #f6f7f9; color: #1f2937; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+.topbar { height: 56px; background: #0f172a; color: #fff; display: flex; align-items: center; gap: 16px; padding: 0 24px; }
+.topbar h1 { font-size: 18px; font-weight: 650; }
+.topbar a { margin-left: auto; color: #cbd5e1; text-decoration: none; font-size: 14px; }
+.shell { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.tab { border: 1px solid #d1d5db; background: #fff; color: #374151; border-radius: 8px; padding: 9px 14px; cursor: pointer; font-size: 14px; }
+.tab.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+.panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+.panel h2 { font-size: 16px; margin-bottom: 14px; }
+.panel h3 { font-size: 14px; margin-bottom: 12px; color: #111827; }
+.muted { color: #6b7280; font-size: 13px; line-height: 1.6; }
+.status { display: flex; align-items: center; gap: 8px; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; }
+.status.ok { background: #ecfdf5; color: #047857; }
+.status.warn { background: #fffbeb; color: #92400e; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+.field input, .field select, .field textarea { width: 100%; min-height: 40px; border: 1px solid #d1d5db; border-radius: 8px; padding: 9px 11px; font-size: 14px; outline: none; background: #fff; }
+.field textarea { min-height: 88px; resize: vertical; line-height: 1.5; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+.checkbox-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.checkbox-item { display: flex; align-items: center; gap: 8px; min-height: 40px; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; background: #fff; font-size: 13px; }
+.checkbox-item input { width: 16px; height: 16px; min-height: auto; padding: 0; }
+.hint { margin-top: 4px; color: #6b7280; font-size: 12px; line-height: 1.5; }
+.option-note { margin-top: 6px; color: #4b5563; font-size: 12px; line-height: 1.5; }
+.badge { display: inline-flex; align-items: center; min-height: 20px; border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 600; margin-left: 6px; }
+.badge.trained { background: #dcfce7; color: #166534; }
+.badge.generic { background: #e0f2fe; color: #075985; }
+.badge.planned { background: #fef3c7; color: #92400e; }
+.badge.none { background: #f3f4f6; color: #4b5563; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; border: 1px solid transparent; border-radius: 8px; padding: 0 16px; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.btn.primary { background: #2563eb; color: #fff; }
+.btn.secondary { background: #fff; border-color: #d1d5db; color: #374151; }
+.btn.success { background: #059669; color: #fff; }
+.btn.warning { background: #f59e0b; color: #fff; }
+.empty, .loading { padding: 32px; text-align: center; color: #6b7280; }
+.test-results { margin-top: 14px; display: grid; gap: 8px; }
+.test-item { border-radius: 8px; padding: 10px 12px; border: 1px solid transparent; font-size: 13px; line-height: 1.5; }
+.test-item strong { display: block; margin-bottom: 2px; color: #111827; }
+.test-item.ok { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.test-item.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.test-item.error { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.client-meta { display: grid; gap: 10px; margin-top: 10px; }
+.client-device { border-radius: 8px; background: #f9fafb; border: 1px solid #e5e7eb; padding: 12px; font-size: 13px; }
+.client-device strong { display: block; color: #111827; margin-bottom: 4px; word-break: break-all; }
+.client-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.client-tag { border-radius: 999px; background: #fff; border: 1px solid #e5e7eb; padding: 3px 8px; color: #4b5563; font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>AgentHub 能力配置</h1>
+  <a href="/">返回首页</a>
+</header>
+
+<main class="shell">
+  <div id="caps-list"></div>
+  <div id="config-area"></div>
+</main>
+
+<script>
+const API = "";
+const CANONICAL_CAPS = ["isp-smart-cs", "ai-smart-monitor"];
+const REQUESTED_CAP = new URLSearchParams(window.location.search).get("cap");
+let activeCapId = "";
+let adapterOptions = {};
+
+function getHeaders() {
+  const token = localStorage.getItem("token");
+  if (!token || token === "undefined" || token === "null") {
+    localStorage.removeItem("token");
+    window.location.href = "/?redirect=" + encodeURIComponent(window.location.pathname + window.location.search);
+    return {};
+  }
+  return { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+async function loadCapabilities() {
+  const list = document.getElementById("caps-list");
+  list.innerHTML = '<div class="loading">正在加载已订阅能力...</div>';
+
+  try {
+    const meResp = await fetch(`${API}/api/auth/me`, { headers: getHeaders() });
+    if (!meResp.ok) {
+      window.location.href = "/";
+      return;
+    }
+
+    const tabs = document.createElement("div");
+    tabs.className = "tabs";
+    const available = [];
+
+    for (const capId of CANONICAL_CAPS) {
+      const resp = await fetch(`${API}/api/cap-config/my-config/${capId}`, { headers: getHeaders() });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      available.push({ capId, name: data.cap_name || capId });
+    }
+
+    if (!available.length) {
+      list.innerHTML = '<div class="panel empty">暂无可配置的已订阅能力。</div>';
+      return;
+    }
+
+    list.innerHTML = "";
+    for (const item of available) {
+      const button = document.createElement("button");
+      button.className = "tab";
+      button.textContent = item.name;
+      button.addEventListener("click", () => loadConfigForm(item.capId, button));
+      tabs.appendChild(button);
+    }
+    list.appendChild(tabs);
+    const requestedIndex = available.findIndex(item => item.capId === REQUESTED_CAP);
+    const initialTab = tabs.querySelectorAll(".tab")[requestedIndex >= 0 ? requestedIndex : 0];
+    initialTab?.click();
+  } catch (error) {
+    list.innerHTML = `<div class="panel empty">加载失败：${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function loadConfigForm(capId, tabButton) {
+  activeCapId = capId;
+  document.querySelectorAll(".tab").forEach(btn => btn.classList.remove("active"));
+  tabButton.classList.add("active");
+
+  const area = document.getElementById("config-area");
+  area.innerHTML = '<div class="loading">正在加载配置表单...</div>';
+
+  try {
+    const resp = await fetch(`${API}/api/cap-config/my-config/${capId}`, { headers: getHeaders() });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || "配置不可用");
+    }
+
+    const data = await resp.json();
+    adapterOptions = await loadAdapterOptions(capId);
+    const template = data.template || {};
+    const props = template.properties || {};
+    const required = template.required || [];
+    const groups = data.ui_schema?.groups || [];
+    const values = data.values || {};
+    const clientStatus = await loadClientStatus();
+
+    let html = `<div class="status ${data.is_configured ? "ok" : "warn"}">
+      <span class="dot"></span>
+      <span>${data.is_configured ? "已配置，客户端下次心跳会自动更新。" : "尚未配置，请填写必要信息。"}</span>
+    </div>`;
+
+    html += renderClientStatus(clientStatus, capId);
+
+    if (data.api_key) {
+      html += `<section class="panel">
+        <h3>客户端 API Key</h3>
+        <p class="muted">安装 Windows 客户端后，在本地工作台粘贴这个 Key 绑定当前订阅能力。</p>
+        <div class="status ok" style="justify-content:space-between;gap:12px;align-items:flex-start">
+          <span class="mono" style="word-break:break-all">${escapeHtml(data.api_key)}</span>
+          <button class="btn secondary" type="button" onclick="copyText('${escapeAttr(data.api_key)}')">复制 Key</button>
+        </div>
+      </section>`;
+    }
+
+    if (data.description) {
+      html += `<section class="panel"><p class="muted">${escapeHtml(data.description)}</p></section>`;
+    }
+
+    if (!Object.keys(props).length) {
+      html += '<section class="panel">该能力暂不需要配置。</section>';
+    } else if (groups.length) {
+      for (const group of groups) {
+        html += `<section class="panel"><h3>${escapeHtml(group.title)}</h3>`;
+        for (const key of group.fields || []) {
+          html += renderField(key, props[key], values[key], required.includes(key));
+        }
+        html += "</section>";
+      }
+    } else {
+      html += '<section class="panel"><h2>配置项</h2>';
+      for (const [key, field] of Object.entries(props)) {
+        html += renderField(key, field, values[key], required.includes(key));
+      }
+      html += "</section>";
+    }
+
+    html += `<section class="panel"><div class="actions">
+      <button class="btn primary" onclick="saveConfig()">保存配置</button>
+      <button class="btn warning" onclick="testConfig()">检测配置</button>
+      <a class="btn success" href="/cap-chat.html?cap=${encodeURIComponent(capId)}">打开对话</a>
+      <a class="btn secondary" href="/downloads/AgentHubClientSetup-1.0.17.exe">下载 Windows 安装包</a>
+      <a class="btn secondary" href="/">返回市场</a>
+    </div><div id="test-results" class="test-results"></div></section>`;
+
+    area.innerHTML = html;
+  } catch (error) {
+    area.innerHTML = `<section class="panel empty">${escapeHtml(error.message)}</section>`;
+  }
+}
+
+async function loadAdapterOptions(capId) {
+  try {
+    const resp = await fetch(`${API}/api/cap-config/adapter-options/${capId}`, { headers: getHeaders() });
+    if (!resp.ok) return {};
+    const data = await resp.json();
+    return data.categories || {};
+  } catch {
+    return {};
+  }
+}
+
+async function loadClientStatus() {
+  try {
+    const resp = await fetch(`${API}/api/dashboard/client-status`, { headers: getHeaders() });
+    if (!resp.ok) return { online: false, online_count: 0, devices: [] };
+    const data = await resp.json();
+    return data.data || data || { online: false, online_count: 0, devices: [] };
+  } catch {
+    return { online: false, online_count: 0, devices: [] };
+  }
+}
+
+function renderClientStatus(status, capId) {
+  const devices = status.devices || [];
+  const matched = devices.filter(device => {
+    const plugins = device.plugin_capabilities || [];
+    const caps = device.capabilities || [];
+    return plugins.some(item => item.cap_id === capId) || caps.some(item => item.cap_id === capId);
+  });
+  const online = matched.length > 0;
+  let html = `<section class="panel">
+    <h3>统一客户端状态</h3>
+    <div class="status ${online ? "ok" : "warn"}" style="margin-bottom:0">
+      <span class="dot"></span>
+      <span>${online ? `当前能力已有 ${matched.length} 台在线客户端可执行任务。` : "未检测到当前能力的在线客户端。请先下载并启动统一客户端，输入订阅 API Key。"}</span>
+    </div>`;
+
+  if (matched.length) {
+    html += '<div class="client-meta">';
+    matched.forEach(device => {
+      html += `<div class="client-device">
+        <strong>${escapeHtml(device.device_id)}</strong>
+        <span>版本 ${escapeHtml(device.client_version || "-")} · 心跳 ${escapeHtml(heartbeatText(device))}</span>
+        <div class="client-tags">`;
+      (device.plugin_capabilities || []).forEach(plugin => {
+        html += `<span class="client-tag">${escapeHtml(plugin.name || plugin.cap_id)} · ${escapeHtml((plugin.actions || []).length)} 个动作</span>`;
+      });
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  html += '</section>';
+  return html;
+}
+
+function heartbeatText(device) {
+  const age = device?.last_heartbeat_age_seconds;
+  if (age == null) return "暂无心跳";
+  if (age < 60) return `${age} 秒前`;
+  return `${Math.floor(age / 60)} 分钟前`;
+}
+
+function renderField(key, field, value, isRequired) {
+  if (!field) return "";
+  const fieldValue = value ?? field.default ?? "";
+  const title = `${field.title || key}${isRequired ? " *" : ""}`;
+  let input = "";
+  let optionNote = "";
+
+  if (field.type === "select") {
+    const source = field.options_key ? adapterOptions[field.options_key] : null;
+    const options = source?.options || (field.enum || []).map((option, index) => ({
+      value: option,
+      label: field.enum_labels?.[index] || option,
+      status: "",
+    }));
+    input = `<select id="field_${key}">`;
+    options.forEach((option) => {
+      const label = option.status ? `${option.label}（${statusLabel(option.status)}）` : option.label;
+      input += `<option value="${escapeAttr(option.value)}" ${fieldValue === option.value ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    });
+    input += "</select>";
+    if (source?.description) {
+      optionNote = `<div class="option-note">${escapeHtml(source.description)}</div>`;
+    }
+  } else if (field.type === "multiselect") {
+    const source = field.options_key ? adapterOptions[field.options_key] : null;
+    const selectedValues = Array.isArray(fieldValue) ? fieldValue : String(fieldValue || "").split(",").filter(Boolean);
+    const options = source?.options || (field.enum || []).map((option, index) => ({
+      value: option,
+      label: field.enum_labels?.[index] || option,
+      status: "",
+    }));
+    input = `<div class="checkbox-grid" data-field="${escapeAttr(key)}">`;
+    options.forEach((option) => {
+      const id = `field_${key}_${option.value}`;
+      const label = option.status ? `${option.label}（${statusLabel(option.status)}）` : option.label;
+      input += `<label class="checkbox-item" for="${escapeAttr(id)}">
+        <input type="checkbox" id="${escapeAttr(id)}" name="field_${escapeAttr(key)}" value="${escapeAttr(option.value)}" ${selectedValues.includes(option.value) ? "checked" : ""}>
+        <span>${escapeHtml(label)}</span>
+      </label>`;
+    });
+    input += "</div>";
+    if (source?.description) {
+      optionNote = `<div class="option-note">${escapeHtml(source.description)}</div>`;
+    }
+  } else if (field.type === "password") {
+    input = `<input type="password" id="field_${key}" value="${escapeAttr(fieldValue)}" placeholder="${escapeAttr(field.placeholder || "")}">`;
+  } else if (field.type === "textarea") {
+    input = `<textarea id="field_${key}" placeholder="${escapeAttr(field.placeholder || "")}">${escapeHtml(fieldValue)}</textarea>`;
+  } else if (field.type === "number") {
+    input = `<input type="number" id="field_${key}" value="${escapeAttr(fieldValue)}" placeholder="${escapeAttr(field.placeholder || "")}" ${field.minimum != null ? `min="${field.minimum}"` : ""} ${field.maximum != null ? `max="${field.maximum}"` : ""}>`;
+  } else {
+    input = `<input type="text" id="field_${key}" value="${escapeAttr(fieldValue)}" placeholder="${escapeAttr(field.placeholder || "")}">`;
+  }
+
+  return `<div class="field">
+    <label for="field_${key}">${escapeHtml(title)}</label>
+    ${input}
+    ${field.description ? `<div class="hint">${escapeHtml(field.description)}</div>` : ""}
+    ${optionNote}
+  </div>`;
+}
+
+function statusLabel(status) {
+  const map = {
+    trained: "已训练",
+    generic: "通用",
+    planned: "待适配",
+    none: "不接入",
+  };
+  return map[status] || status;
+}
+
+async function saveConfig() {
+  if (!activeCapId) return;
+  const resp = await fetch(`${API}/api/cap-config/my-config/${activeCapId}`, { headers: getHeaders() });
+  const data = await resp.json();
+  const props = data.template?.properties || {};
+  const config = collectConfig(props);
+
+  const saveResp = await fetch(`${API}/api/cap-config/save`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ cap_id: activeCapId, config }),
+  });
+
+  if (!saveResp.ok) {
+    const err = await saveResp.json().catch(() => ({}));
+    alert(err.detail || "保存失败");
+    return;
+  }
+
+  alert("配置已保存。");
+  const currentTab = document.querySelector(".tab.active");
+  if (currentTab) loadConfigForm(activeCapId, currentTab);
+}
+
+async function testConfig() {
+  if (!activeCapId) return;
+  const resultBox = document.getElementById("test-results");
+  resultBox.innerHTML = '<div class="test-item warn"><strong>正在检测</strong><span>正在校验配置完整性、通知格式和客户端在线状态...</span></div>';
+
+  const resp = await fetch(`${API}/api/cap-config/my-config/${activeCapId}`, { headers: getHeaders() });
+  if (!resp.ok) {
+    resultBox.innerHTML = '<div class="test-item error"><strong>检测失败</strong><span>无法读取当前配置模板。</span></div>';
+    return;
+  }
+  const data = await resp.json();
+  const props = data.template?.properties || {};
+  const config = collectConfig(props);
+
+  const testResp = await fetch(`${API}/api/cap-config/test`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ cap_id: activeCapId, config }),
+  });
+  const result = await testResp.json().catch(() => ({}));
+  if (!testResp.ok) {
+    resultBox.innerHTML = `<div class="test-item error"><strong>检测失败</strong><span>${escapeHtml(result.detail || "检测接口不可用")}</span></div>`;
+    return;
+  }
+  const rows = result.results || [];
+  const summaryClass = result.status || "warn";
+  let html = `<div class="test-item ${escapeAttr(summaryClass)}"><strong>${escapeHtml(result.message || "检测完成")}</strong><span>整体状态：${escapeHtml(statusText(summaryClass))}</span></div>`;
+  rows.forEach((item) => {
+    html += `<div class="test-item ${escapeAttr(item.status)}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.message)}</span></div>`;
+  });
+  resultBox.innerHTML = html;
+}
+
+function collectConfig(props) {
+  const config = {};
+  for (const [key, field] of Object.entries(props)) {
+    const el = document.getElementById(`field_${key}`);
+    if (field.type === "multiselect") {
+      config[key] = Array.from(document.querySelectorAll(`input[name="field_${key}"]:checked`)).map(item => item.value);
+      continue;
+    }
+    if (!el) continue;
+    config[key] = field.type === "number" ? Number(el.value) : el.value;
+  }
+  return config;
+}
+
+function statusText(status) {
+  return { ok: "通过", warn: "有提醒", error: "有错误" }[status] || status;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+function copyText(value) {
+  navigator.clipboard.writeText(value).then(() => alert("API Key 已复制"));
+}
+
+loadCapabilities();
+</script>
+</body>
+</html>

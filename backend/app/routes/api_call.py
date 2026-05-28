@@ -25,25 +25,28 @@ def call_capability(
     x_api_key: str = Header(..., alias="X-API-Key"),
     db: Session = Depends(get_db),
 ):
-    """通过 API Key 直接调用能力"""
-    # 验证 API Key
-    sub = db.query(Subscription).filter(
+    """Call a capability with a customer-bound API key."""
+    identity_sub = db.query(Subscription).filter(
         Subscription.api_key == x_api_key,
         Subscription.status == "active",
     ).first()
-    if not sub:
+    if not identity_sub:
         raise AppException(ErrorCode.AUTH_API_KEY_INVALID)
 
-    # 限频
     if not rate_limiter.check(f"apikey_{x_api_key[:12]}"):
         raise AppException(ErrorCode.CALL_RATE_LIMIT)
 
-    # 获取能力
     cap = db.query(Capability).filter(Capability.cap_id == cap_id).first()
     if not cap or cap.status != "published":
         raise AppException(ErrorCode.CAP_NOT_FOUND)
-    if sub.capability_id != cap.id:
-        raise AppException(ErrorCode.AUTH_PERMISSION_DENIED, detail="API Key 与该能力不匹配")
+
+    target_sub = db.query(Subscription).filter(
+        Subscription.customer_id == identity_sub.customer_id,
+        Subscription.capability_id == cap.id,
+        Subscription.status == "active",
+    ).first()
+    if not target_sub:
+        raise AppException(ErrorCode.AUTH_PERMISSION_DENIED, detail="客户未订阅该能力或订阅已失效")
 
     # 执行
     call_id = f"call_{new_trace_id()}"
@@ -69,9 +72,9 @@ def call_capability(
 
     # 记录日志
     log = CallLog(
-        subscription_id=sub.id,
+        subscription_id=target_sub.id,
         capability_id=cap.id,
-        customer_id=sub.customer_id,
+        customer_id=identity_sub.customer_id,
         session_id=call_id,
         trace_id=trace_id,
         mode="cloud",

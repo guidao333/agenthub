@@ -1,6 +1,7 @@
 """Customer dashboard routes: subscriptions, usage, billing, API keys"""
 
 import json
+import time
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -12,6 +13,29 @@ from ..utils.errors import ErrorCode, AppException, api_response
 from ..utils.helpers import now_timestamp, new_api_key
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+
+@router.get("/client-status")
+def client_status(current_user: User = Depends(get_current_user)):
+    """Return online AgentHub desktop clients for the current customer."""
+    try:
+        from ..routes.ws_client import manager as ws_manager
+
+        devices = ws_manager.get_devices_for_customer(current_user.id)
+        return api_response(data={
+            "online": bool(devices),
+            "online_count": len(devices),
+            "server_time": time.time(),
+            "devices": devices,
+        })
+    except Exception as exc:
+        return api_response(data={
+            "online": False,
+            "online_count": 0,
+            "server_time": time.time(),
+            "devices": [],
+            "error": str(exc),
+        })
 
 
 # ---- 已订阅能力 ----

@@ -10,6 +10,8 @@ import sqlite3
 import json
 import os
 import uuid
+from ..auth import get_current_user
+from ..models import User
 
 router = APIRouter(prefix="/vision", tags=["AI视觉"])
 
@@ -44,6 +46,7 @@ class EventReport(BaseModel):
     confidence: float = 0.0
     description: Optional[str] = None
     snapshot_base64: Optional[str] = None  # 截图base64
+    video_clip_base64: Optional[str] = None  # 视频片段base64（mp4）
     metadata: Optional[dict] = None  # 额外数据（如坐标、分类等）
 
 class NotifyChannel(BaseModel):
@@ -80,6 +83,47 @@ def get_db():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
+
+def _user_id(user: User) -> str:
+    return str(user.id)
+
+def _user_where(user: User, column: str = "user_id"):
+    if user.role == "admin":
+        return "", []
+    return f" WHERE {column}=?", [_user_id(user)]
+
+def _append_user_condition(user: User, conditions: list, params: list, column: str = "user_id"):
+    if user.role != "admin":
+        conditions.append(f"{column}=?")
+        params.append(_user_id(user))
+
+def _require_device_owner(conn, device_id: str, user: User):
+    conditions = ["id=?"]
+    params = [device_id]
+    _append_user_condition(user, conditions, params)
+    row = conn.execute(
+        f"SELECT id, user_id FROM vision_devices WHERE {' AND '.join(conditions)}",
+        params,
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return row
+
+def _require_camera_owner(conn, camera_id: str, user: User):
+    conditions = ["c.id=?"]
+    params = [camera_id]
+    _append_user_condition(user, conditions, params, "d.user_id")
+    row = conn.execute(
+        f"""
+        SELECT c.* FROM vision_cameras c
+        JOIN vision_devices d ON c.device_id = d.id
+        WHERE {' AND '.join(conditions)}
+        """,
+        params,
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    return row
 
 def init_vision_tables():
     """初始化AI视觉相关表"""
@@ -126,6 +170,7 @@ def init_vision_tables():
             confidence REAL DEFAULT 0.0,
             description TEXT,
             snapshot_path TEXT,
+            video_clip_path TEXT,
             metadata TEXT,
             acknowledged INTEGER DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now')),
@@ -213,7 +258,7 @@ def verify_subscription(device_info: dict, capability: str):
 # ============================================================
 
 @router.post("/devices")
-async def register_device(data: DeviceRegister):
+async def register_device(data: DeviceRegister, current_user: User = Depends(get_current_user)):
     """注册边缘设备（用户购买能力后调用）"""
     import secrets
     conn = get_db()
@@ -221,7 +266,7 @@ async def register_device(data: DeviceRegister):
     api_key = f"ahv_{secrets.token_hex(24)}"
     
     # TODO: 从登录token获取user_id，暂时用占位
-    user_id = "demo_user"
+    user_id = _user_id(current_user)
     
     conn.execute(
         "INSERT INTO vision_devices (id, user_id, device_name, device_type, os_info, hostname, api_key) VALUES (?,?,?,?,?,?,?)",
@@ -242,10 +287,14 @@ async def register_device(data: DeviceRegister):
 
 
 @router.get("/devices")
-async def list_devices():
+async def list_devices(current_user: User = Depends(get_current_user)):
     """列出用户的所有设备"""
     conn = get_db()
-    devices = conn.execute("SELECT * FROM vision_devices ORDER BY created_at DESC").fetchall()
+    where, params = _user_where(current_user)
+    devices = conn.execute(
+        f"SELECT * FROM vision_devices{where} ORDER BY created_at DESC",
+        params,
+    ).fetchall()
     result = []
     for d in devices:
         cams = conn.execute("SELECT id, ip, location, status FROM vision_cameras WHERE device_id=?", (d["id"],)).fetchall()
@@ -255,9 +304,10 @@ async def list_devices():
 
 
 @router.delete("/devices/{device_id}")
-async def delete_device(device_id: str):
+async def delete_device(device_id: str, current_user: User = Depends(get_current_user)):
     """删除设备及其关联的摄像头和事件"""
     conn = get_db()
+    _require_device_owner(conn, device_id, current_user)
     conn.execute("DELETE FROM vision_events WHERE device_id=?", (device_id,))
     conn.execute("DELETE FROM vision_cameras WHERE device_id=?", (device_id,))
     conn.execute("DELETE FROM vision_devices WHERE id=?", (device_id,))
@@ -271,9 +321,10 @@ async def delete_device(device_id: str):
 # ============================================================
 
 @router.post("/cameras")
-async def add_camera(data: CameraAdd):
+async def add_camera(data: CameraAdd, current_user: User = Depends(get_current_user)):
     """添加摄像头"""
     conn = get_db()
+    _require_device_owner(conn, data.device_id, current_user)
     cam_id = str(uuid.uuid4())
     
     # 自动生成RTSP URL
@@ -298,22 +349,34 @@ async def add_camera(data: CameraAdd):
 
 
 @router.get("/cameras")
-async def list_cameras(device_id: Optional[str] = None):
+async def list_cameras(device_id: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """列出摄像头"""
     conn = get_db()
+    conditions = []
+    params = []
     if device_id:
-        rows = conn.execute("SELECT * FROM vision_cameras WHERE device_id=?", (device_id,)).fetchall()
-    else:
-        rows = conn.execute("SELECT * FROM vision_cameras").fetchall()
+        conditions.append("c.device_id=?")
+        params.append(device_id)
+    _append_user_condition(current_user, conditions, params, "d.user_id")
+    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+    rows = conn.execute(
+        f"""
+        SELECT c.* FROM vision_cameras c
+        JOIN vision_devices d ON c.device_id = d.id
+        {where}
+        ORDER BY c.created_at DESC
+        """,
+        params,
+    ).fetchall()
     conn.close()
     return {"cameras": [dict(r) for r in rows]}
 
 
 @router.post("/cameras/{camera_id}/discover")
-async def discover_camera(camera_id: str):
+async def discover_camera(camera_id: str, current_user: User = Depends(get_current_user)):
     """ONVIF自动发现摄像头能力"""
     conn = get_db()
-    cam = conn.execute("SELECT * FROM vision_cameras WHERE id=?", (camera_id,)).fetchone()
+    cam = _require_camera_owner(conn, camera_id, current_user)
     if not cam:
         conn.close()
         raise HTTPException(status_code=404, detail="摄像头不存在")
@@ -341,9 +404,10 @@ async def edge_heartbeat(data: EdgeHeartbeat, device: dict = Depends(verify_api_
         (data.status, device["id"])
     )
     # 更新关联摄像头在线状态
+    limit = int(data.cameras_online)
     conn.execute(
-        "UPDATE vision_cameras SET status='online' WHERE device_id=? LIMIT ?",
-        (device["id"], data.cameras_online)
+        "UPDATE vision_cameras SET status='online' WHERE device_id=? LIMIT " + str(limit),
+        (device["id"],)
     )
     conn.commit()
     conn.close()
@@ -393,9 +457,28 @@ async def edge_report_event(data: EventReport, device: dict = Depends(verify_api
         with open(snapshot_path, "wb") as f:
             f.write(base64.b64decode(data.snapshot_base64))
     
+    # Save video clip if present
+    video_clip_path = None
+    if data.video_clip_base64:
+        clip_dir = "/opt/agenthub/data/clips"
+        os.makedirs(clip_dir, exist_ok=True)
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        clip_filename = f"{data.event_type}_{data.camera_id[:8]}_{ts}.mp4"
+        video_clip_path = f"{clip_dir}/{clip_filename}"
+        with open(video_clip_path, "wb") as f:
+            f.write(base64.b64decode(data.video_clip_base64))
+
+    camera = conn.execute(
+        "SELECT id FROM vision_cameras WHERE id=? AND device_id=?",
+        (data.camera_id, device["id"]),
+    ).fetchone()
+    if not camera:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Camera not found for this device")
+
     conn.execute(
-        "INSERT INTO vision_events (id, user_id, device_id, camera_id, event_type, severity, confidence, description, snapshot_path, metadata) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (event_id, device["user_id"], device["id"], data.camera_id, data.event_type, data.severity, data.confidence, data.description, snapshot_path, json.dumps(data.metadata or {}))
+        "INSERT INTO vision_events (id, user_id, device_id, camera_id, event_type, severity, confidence, description, snapshot_path, video_clip_path, metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (event_id, device["user_id"], device["id"], data.camera_id, data.event_type, data.severity, data.confidence, data.description, snapshot_path, video_clip_path, json.dumps(data.metadata or {}))
     )
     conn.commit()
     
@@ -407,7 +490,8 @@ async def edge_report_event(data: EventReport, device: dict = Depends(verify_api
         "description": data.description,
         "camera_id": data.camera_id,
         "confidence": data.confidence,
-        "snapshot_path": snapshot_path
+        "snapshot_path": snapshot_path,
+        "video_clip_path": video_clip_path
     })
     
     conn.close()
@@ -426,7 +510,8 @@ async def list_events(
     severity: Optional[str] = None,
     acknowledged: Optional[int] = None,
     limit: int = Query(50, le=200),
-    offset: int = 0
+    offset: int = 0,
+    current_user: User = Depends(get_current_user)
 ):
     """查询事件列表"""
     conn = get_db()
@@ -448,6 +533,7 @@ async def list_events(
     if acknowledged is not None:
         conditions.append("acknowledged=?")
         params.append(acknowledged)
+    _append_user_condition(current_user, conditions, params)
     
     where = " WHERE " + " AND ".join(conditions) if conditions else ""
     
@@ -462,10 +548,16 @@ async def list_events(
 
 
 @router.post("/events/{event_id}/acknowledge")
-async def acknowledge_event(event_id: str):
+async def acknowledge_event(event_id: str, current_user: User = Depends(get_current_user)):
     """确认事件"""
     conn = get_db()
-    conn.execute("UPDATE vision_events SET acknowledged=1 WHERE id=?", (event_id,))
+    conditions = ["id=?"]
+    params = [event_id]
+    _append_user_condition(current_user, conditions, params)
+    conn.execute(
+        f"UPDATE vision_events SET acknowledged=1 WHERE {' AND '.join(conditions)}",
+        params,
+    )
     conn.commit()
     conn.close()
     return {"message": "已确认"}
@@ -476,13 +568,15 @@ async def acknowledge_event(event_id: str):
 # ============================================================
 
 @router.post("/rules")
-async def create_rule(data: DetectionRule):
+async def create_rule(data: DetectionRule, current_user: User = Depends(get_current_user)):
     """创建检测规则"""
     conn = get_db()
+    if data.camera_id:
+        _require_camera_owner(conn, data.camera_id, current_user)
     rule_id = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO vision_rules (id, user_id, rule_name, camera_id, capability, enabled, schedule, params, alert_threshold) VALUES (?,?,?,?,?,?,?,?,?)",
-        (rule_id, "demo_user", data.rule_name, data.camera_id, data.capability, int(data.enabled), json.dumps(data.schedule or {}), json.dumps(data.params or {}), data.alert_threshold)
+        (rule_id, _user_id(current_user), data.rule_name, data.camera_id, data.capability, int(data.enabled), json.dumps(data.schedule or {}), json.dumps(data.params or {}), data.alert_threshold)
     )
     conn.commit()
     conn.close()
@@ -490,24 +584,33 @@ async def create_rule(data: DetectionRule):
 
 
 @router.get("/rules")
-async def list_rules(capability: Optional[str] = None):
+async def list_rules(capability: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """列出检测规则"""
     conn = get_db()
+    conditions = []
+    params = []
     if capability:
-        rows = conn.execute("SELECT * FROM vision_rules WHERE capability=?", (capability,)).fetchall()
-    else:
-        rows = conn.execute("SELECT * FROM vision_rules").fetchall()
+        conditions.append("capability=?")
+        params.append(capability)
+    _append_user_condition(current_user, conditions, params)
+    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+    rows = conn.execute(f"SELECT * FROM vision_rules{where} ORDER BY created_at DESC", params).fetchall()
     conn.close()
     return {"rules": [{**dict(r), "schedule": json.loads(r["schedule"] or "{}"), "params": json.loads(r["params"] or "{}")} for r in rows]}
 
 
 @router.put("/rules/{rule_id}")
-async def update_rule(rule_id: str, data: DetectionRule):
+async def update_rule(rule_id: str, data: DetectionRule, current_user: User = Depends(get_current_user)):
     """更新检测规则"""
     conn = get_db()
+    if data.camera_id:
+        _require_camera_owner(conn, data.camera_id, current_user)
+    conditions = ["id=?"]
+    params = [data.rule_name, data.camera_id, data.capability, int(data.enabled), json.dumps(data.schedule or {}), json.dumps(data.params or {}), data.alert_threshold, rule_id]
+    _append_user_condition(current_user, conditions, params)
     conn.execute(
-        "UPDATE vision_rules SET rule_name=?, camera_id=?, capability=?, enabled=?, schedule=?, params=?, alert_threshold=? WHERE id=?",
-        (data.rule_name, data.camera_id, data.capability, int(data.enabled), json.dumps(data.schedule or {}), json.dumps(data.params or {}), data.alert_threshold, rule_id)
+        f"UPDATE vision_rules SET rule_name=?, camera_id=?, capability=?, enabled=?, schedule=?, params=?, alert_threshold=? WHERE {' AND '.join(conditions)}",
+        params
     )
     conn.commit()
     conn.close()
@@ -519,13 +622,13 @@ async def update_rule(rule_id: str, data: DetectionRule):
 # ============================================================
 
 @router.post("/notify/channels")
-async def add_notify_channel(data: NotifyChannel):
+async def add_notify_channel(data: NotifyChannel, current_user: User = Depends(get_current_user)):
     """添加通知渠道"""
     conn = get_db()
     ch_id = str(uuid.uuid4())
     conn.execute(
         "INSERT INTO vision_notify_channels (id, user_id, channel_type, config, enabled, event_types) VALUES (?,?,?,?,?,?)",
-        (ch_id, "demo_user", data.channel_type, json.dumps(data.config), int(data.enabled), json.dumps(data.event_types or []))
+        (ch_id, _user_id(current_user), data.channel_type, json.dumps(data.config), int(data.enabled), json.dumps(data.event_types or []))
     )
     conn.commit()
     conn.close()
@@ -533,19 +636,29 @@ async def add_notify_channel(data: NotifyChannel):
 
 
 @router.get("/notify/channels")
-async def list_notify_channels():
+async def list_notify_channels(current_user: User = Depends(get_current_user)):
     """列出通知渠道"""
     conn = get_db()
-    rows = conn.execute("SELECT * FROM vision_notify_channels").fetchall()
+    where, params = _user_where(current_user)
+    rows = conn.execute(
+        f"SELECT * FROM vision_notify_channels{where} ORDER BY created_at DESC",
+        params,
+    ).fetchall()
     conn.close()
     return {"channels": [{**dict(r), "config": json.loads(r["config"] or "{}"), "event_types": json.loads(r["event_types"] or "[]")} for r in rows]}
 
 
 @router.post("/notify/test/{channel_id}")
-async def test_notify_channel(channel_id: str):
+async def test_notify_channel(channel_id: str, current_user: User = Depends(get_current_user)):
     """测试通知渠道"""
     conn = get_db()
-    ch = conn.execute("SELECT * FROM vision_notify_channels WHERE id=?", (channel_id,)).fetchone()
+    conditions = ["id=?"]
+    params = [channel_id]
+    _append_user_condition(current_user, conditions, params)
+    ch = conn.execute(
+        f"SELECT * FROM vision_notify_channels WHERE {' AND '.join(conditions)}",
+        params,
+    ).fetchone()
     conn.close()
     if not ch:
         raise HTTPException(status_code=404, detail="通知渠道不存在")
@@ -561,19 +674,32 @@ async def test_notify_channel(channel_id: str):
 # ============================================================
 
 @router.get("/stats")
-async def get_stats(device_id: Optional[str] = None):
+async def get_stats(device_id: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """获取统计数据"""
     conn = get_db()
     
-    base_cond = "WHERE device_id=?" if device_id else ""
-    params = [device_id] if device_id else []
+    conditions = []
+    params = []
+    if device_id:
+        conditions.append("device_id=?")
+        params.append(device_id)
+    _append_user_condition(current_user, conditions, params)
+    base_cond = "WHERE " + " AND ".join(conditions) if conditions else ""
     
     total_events = conn.execute(f"SELECT COUNT(*) FROM vision_events {base_cond}", params).fetchone()[0]
-    today_events = conn.execute(f"SELECT COUNT(*) FROM vision_events WHERE date(created_at)=date('now') {'AND device_id=?' if device_id else ''}", params).fetchone()[0]
+    today_conditions = ["date(created_at)=date('now')"] + conditions
+    unack_conditions = ["acknowledged=0"] + conditions
+    today_events = conn.execute(
+        f"SELECT COUNT(*) FROM vision_events WHERE {' AND '.join(today_conditions)}",
+        params,
+    ).fetchone()[0]
     
     by_type = conn.execute(f"SELECT event_type, COUNT(*) as cnt FROM vision_events {base_cond} GROUP BY event_type ORDER BY cnt DESC", params).fetchall()
     by_severity = conn.execute(f"SELECT severity, COUNT(*) as cnt FROM vision_events {base_cond} GROUP BY severity", params).fetchall()
-    unacknowledged = conn.execute(f"SELECT COUNT(*) FROM vision_events WHERE acknowledged=0 {'AND device_id=?' if device_id else ''}", params).fetchone()[0]
+    unacknowledged = conn.execute(
+        f"SELECT COUNT(*) FROM vision_events WHERE {' AND '.join(unack_conditions)}",
+        params,
+    ).fetchone()[0]
     
     conn.close()
     return {
@@ -661,11 +787,23 @@ async def _send_notification(channel_type: str, config: dict, title: str, body: 
                 })
                 return resp.status_code == 200
         elif channel_type == "sms":
-            # SMS — 预留接口，接入阿里云/腾讯云短信
-            return False
+            api_url = config.get("api_url", "")
+            api_key = config.get("api_key", "")
+            phones = config.get("to") or config.get("phones") or []
+            if isinstance(phones, str):
+                phones = [phones]
+            if not api_url or not phones:
+                return False
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(api_url, json={
+                    "api_key": api_key,
+                    "phones": phones,
+                    "title": title,
+                    "content": body,
+                })
+                return 200 <= resp.status_code < 300
     except Exception:
         return False
-    return False
 
 
 async def _send_email(config: dict, title: str, body: str) -> bool:
@@ -679,20 +817,83 @@ async def _send_email(config: dict, title: str, body: str) -> bool:
     smtp_user = config.get("smtp_user", "5690300@qq.com")
     smtp_pass = config.get("smtp_pass", "")
     to_email = config.get("to", "")
+    to_emails = [item.strip() for item in str(to_email).split(",") if item.strip()]
     
-    if not smtp_pass or not to_email:
+    if not smtp_pass or not to_emails:
         return False
     
     try:
         msg = MIMEMultipart()
         msg["From"] = smtp_user
-        msg["To"] = to_email
+        msg["To"] = ",".join(to_emails)
         msg["Subject"] = title
         msg.attach(MIMEText(body, "plain", "utf-8"))
         
         with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
             server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, to_email, msg.as_string())
+            server.sendmail(smtp_user, to_emails, msg.as_string())
         return True
     except Exception:
         return False
+
+
+# --- AI Vision Chat API ---
+
+class VisionChatRequest(BaseModel):
+    message: str
+    session_id: str = ""
+
+class VisionChatResponse(BaseModel):
+    type: str
+    content: str
+
+_vision_chat_engine = None
+
+def _get_chat_engine():
+    global _vision_chat_engine
+    if _vision_chat_engine is None:
+        from ..services.vision_chat_engine import VisionChatEngine
+        _vision_chat_engine = VisionChatEngine()
+    return _vision_chat_engine
+
+# Session history store (in-memory, per session_id)
+_chat_sessions: list = []
+
+def _get_session_history(session_id: str, limit: int = 20) -> list:
+    for s in _chat_sessions:
+        if s["id"] == session_id:
+            return s["messages"][-limit:]
+    return []
+
+def _add_session_message(session_id: str, role: str, content: str):
+    for s in _chat_sessions:
+        if s["id"] == session_id:
+            s["messages"].append({"role": role, "content": content})
+            if len(s["messages"]) > 50:
+                s["messages"] = s["messages"][-50:]
+            return
+    _chat_sessions.append({"id": session_id, "messages": [{"role": role, "content": content}]})
+    if len(_chat_sessions) > 100:
+        _chat_sessions.pop(0)
+
+@router.post("/chat", response_model=VisionChatResponse)
+def vision_chat(req: VisionChatRequest):
+    import uuid
+    session_id = req.session_id or str(uuid.uuid4())[:8]
+
+    history = _get_session_history(session_id)
+    _add_session_message(session_id, "user", req.message)
+
+    engine = _get_chat_engine()
+    result = engine.chat(
+        message=req.message,
+        context=history,
+        device_id=None,
+    )
+
+    _add_session_message(session_id, "assistant", result.get("content", ""))
+
+    return VisionChatResponse(
+        type=result.get("type", "reply"),
+        content=result.get("content", ""),
+    )

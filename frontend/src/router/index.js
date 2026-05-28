@@ -7,9 +7,11 @@ const routes = [
   { path: '/capability/:capId', name: 'capability', component: () => import('../views/CapabilityDetail.vue') },
   { path: '/dashboard', name: 'dashboard', component: () => import('../views/Dashboard.vue'), meta: { auth: true } },
   { path: '/chat/:sessionId?', name: 'chat', component: () => import('../views/ChatWindow.vue'), meta: { auth: true } },
+  { path: '/cap-config/:capId', name: 'cap-config', component: () => import('../views/CapConfig.vue'), meta: { auth: true } },
+  { path: '/cap-chat/:capId', name: 'cap-chat', component: () => import('../views/CapChat.vue'), meta: { auth: true } },
   { path: '/developer', name: 'developer', component: () => import('../views/DeveloperPortal.vue'), meta: { auth: true, roles: ['developer', 'admin'] } },
   { path: '/admin', name: 'admin', component: () => import('../views/AdminPanel.vue'), meta: { auth: true, role: 'admin' } },
-  { path: '/vision', name: 'vision', component: () => import('../views/VisionPanel.vue'), meta: { auth: true, role: 'admin' } },,
+  { path: '/vision', name: 'vision', component: () => import('../views/VisionPanel.vue'), meta: { auth: true, role: 'admin' } },
 ]
 
 const router = createRouter({

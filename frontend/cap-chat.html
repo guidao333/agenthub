@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<script>
+(function() {
+  var cap = new URLSearchParams(window.location.search).get('cap') || 'isp-smart-cs';
+  window.location.replace('/cap-chat/' + cap);
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentHub 能力对话</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { height: 100vh; background: #f6f7f9; color: #1f2937; display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+.topbar { height: 56px; flex-shrink: 0; background: #0f172a; color: #fff; display: flex; align-items: center; gap: 12px; padding: 0 20px; }
+.topbar h1 { font-size: 17px; font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status { margin-left: auto; border-radius: 8px; padding: 5px 9px; font-size: 12px; background: #334155; color: #e2e8f0; }
+.topbar a { color: #cbd5e1; text-decoration: none; font-size: 14px; }
+.chat { flex: 1; width: 100%; max-width: 900px; margin: 0 auto; padding: 18px 16px; overflow-y: auto; }
+.msg { display: flex; margin-bottom: 14px; gap: 10px; }
+.msg.user { flex-direction: row-reverse; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; }
+.assistant .avatar { background: #2563eb; }
+.user .avatar { background: #059669; }
+.bubble { max-width: min(720px, 78%); border-radius: 8px; padding: 11px 13px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+.assistant .bubble { background: #fff; border: 1px solid #e5e7eb; }
+.user .bubble { background: #2563eb; color: #fff; }
+.quick { flex-shrink: 0; width: 100%; max-width: 900px; margin: 0 auto; padding: 8px 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.quick button { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 7px 11px; font-size: 13px; color: #374151; cursor: pointer; }
+.composer { flex-shrink: 0; background: #fff; border-top: 1px solid #e5e7eb; }
+.composer-inner { max-width: 900px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 8px; align-items: flex-end; }
+textarea { flex: 1; min-height: 42px; max-height: 132px; resize: none; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 12px; font: inherit; outline: none; }
+textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+.send { min-height: 42px; border: 0; border-radius: 8px; padding: 0 18px; background: #2563eb; color: #fff; font-weight: 650; cursor: pointer; }
+.send:disabled { background: #93c5fd; cursor: not-allowed; }
+.empty { text-align: center; padding: 48px 16px; color: #6b7280; }
+.empty h2 { font-size: 18px; color: #111827; margin-bottom: 8px; }
+.empty a { color: #2563eb; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1 id="title">能力对话</h1>
+  <span class="status" id="device-status">检测客户端...</span>
+  <a href="/cap-config.html">配置</a>
+</header>
+
+<main class="chat" id="chat"></main>
+<div class="quick" id="quick-actions"></div>
+
+<footer class="composer">
+  <div class="composer-inner">
+    <textarea id="input" placeholder="输入消息..." rows="1"></textarea>
+    <button class="send" id="send-btn" onclick="sendMessage()">发送</button>
+  </div>
+</footer>
+
+<script>
+const API = "";
+let sessionId = "";
+let capId = "";
+
+function getHeaders() {
+  const token = localStorage.getItem("token");
+  if (!token || token === "undefined" || token === "null") {
+    localStorage.removeItem("token");
+    window.location.href = "/?redirect=" + encodeURIComponent(window.location.pathname + window.location.search);
+    return {};
+  }
+  return { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+async function init() {
+  capId = new URLSearchParams(window.location.search).get("cap") || "isp-smart-cs";
+
+  try {
+    const resp = await fetch(`${API}/api/capability-chat/sessions`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ cap_id: capId }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      renderEmpty(resp.status === 403 ? "尚未订阅该能力" : "无法创建对话", err.detail || "请返回市场确认订阅状态。");
+      return;
+    }
+
+    const data = await resp.json();
+    sessionId = data.session_id;
+    document.getElementById("title").textContent = data.cap_name || capId;
+    document.title = `${data.cap_name || capId} - AgentHub`;
+
+    renderQuickActions();
+    await checkDeviceStatus();
+    appendMsg("assistant", welcomeMessage());
+  } catch (error) {
+    renderEmpty("初始化失败", error.message);
+  }
+}
+
+function renderQuickActions() {
+  const actions = capId === "isp-smart-cs"
+    ? [
+        ["查询账号", "查询账号 ABC123 的状态"],
+        ["续费", "给账号 ABC123 续费 3 个月"],
+        ["查询 ONU", "查询账号 ABC123 的 ONU 光猫状态"],
+        ["派工单", "为账号 ABC123 派一个网络故障工单"],
+      ]
+    : [
+        ["触发巡检", "触发一次 AI 巡检"],
+        ["查询事件", "查询最近 24 小时的告警事件"],
+        ["巡检评分", "查看最近 7 天的巡检评分"],
+        ["摄像头状态", "查看所有摄像头在线状态"],
+      ];
+
+  document.getElementById("quick-actions").innerHTML = actions
+    .map(([label, text]) => `<button onclick="quickSend('${escapeAttr(text)}')">${escapeHtml(label)}</button>`)
+    .join("");
+}
+
+async function checkDeviceStatus() {
+  const el = document.getElementById("device-status");
+  try {
+    const resp = await fetch(`${API}/ws/status`, { headers: getHeaders() });
+    const data = await resp.json();
+    el.textContent = data.online_devices > 0 ? `客户端在线 ${data.online_devices}` : "客户端离线";
+  } catch {
+    el.textContent = "客户端未知";
+  }
+}
+
+function welcomeMessage() {
+  if (capId === "isp-smart-cs") {
+    return "你好，我是 ISP 智能客服助手。可以帮你查询账号、续费、停复机、派工单、查询或重启 ONU。";
+  }
+  if (capId === "ai-smart-monitor") {
+    return "你好，我是 AI 智能监控助手。可以帮你触发巡检、查询告警事件、查看巡检评分和摄像头状态。";
+  }
+  return "你好，请告诉我需要处理什么。";
+}
+
+function renderEmpty(title, message) {
+  document.getElementById("chat").innerHTML = `<div class="empty"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(message)}</p><p><a href="/">返回能力市场</a></p></div>`;
+}
+
+function quickSend(text) {
+  document.getElementById("input").value = text;
+  sendMessage();
+}
+
+async function sendMessage() {
+  const input = document.getElementById("input");
+  const button = document.getElementById("send-btn");
+  const text = input.value.trim();
+  if (!text || !sessionId) return;
+
+  input.value = "";
+  input.style.height = "auto";
+  appendMsg("user", text);
+  const loadingId = appendMsg("assistant", "正在处理...", true);
+  button.disabled = true;
+
+  try {
+    const resp = await fetch(`${API}/api/capability-chat/chat`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ session_id: sessionId, message: text }),
+    });
+    document.getElementById(loadingId)?.remove();
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      appendMsg("assistant", err.detail || "请求失败");
+      return;
+    }
+
+    const data = await resp.json();
+    appendMsg("assistant", data.reply || "已处理。");
+    await checkDeviceStatus();
+  } catch (error) {
+    document.getElementById(loadingId)?.remove();
+    appendMsg("assistant", `网络错误：${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function appendMsg(role, text, returnId = false) {
+  const chat = document.getElementById("chat");
+  const id = `msg_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const div = document.createElement("div");
+  div.className = `msg ${role}`;
+  div.id = id;
+  div.innerHTML = `<div class="avatar">${role === "user" ? "我" : "AI"}</div><div class="bubble">${escapeHtml(text)}</div>`;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return returnId ? id : undefined;
+}
+
+const textarea = document.getElementById("input");
+textarea.addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 132) + "px";
+});
+textarea.addEventListener("keydown", function(event) {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+});
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/`/g, "&#96;");
+}
+
+init();
+</script>
+</body>
+</html>

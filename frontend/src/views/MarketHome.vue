@@ -1,154 +1,116 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Hero (only on home) -->
-    <div v-if="!selectedCat" class="bg-gradient-to-r from-primary-600 via-primary-500 to-blue-400 text-white">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 class="text-4xl font-bold mb-3">AI 能力市场</h1>
-        <p class="text-lg text-blue-100 mb-6">发现、订阅、使用 AI Agent 能力 — 让智能触手可及</p>
-        <div class="max-w-2xl relative">
-          <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          <input v-model="searchQuery" @keyup.enter="doSearch" class="w-full pl-12 pr-4 py-3.5 rounded-xl text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-white/50 shadow-lg" placeholder="搜索 AI 能力..." />
-        </div>
-      </div>
-    </div>
+    <section class="bg-white border-b border-gray-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div class="max-w-3xl">
+            <p class="text-sm font-semibold text-primary-600">AgentHub</p>
+            <h1 class="mt-2 text-3xl lg:text-4xl font-bold tracking-tight text-gray-950">
+              AI能力市场
+            </h1>
+            <p class="mt-3 text-base text-gray-600 leading-7">
+              订阅可落地的行业AI能力，也欢迎开发者持续训练、上传更多能力模块。
+            </p>
+          </div>
 
-    <!-- ══════ 首页：大分类卡片 ══════ -->
-    <div v-if="!selectedCat" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <!-- Hot capabilities -->
-      <section v-if="hotCaps.length" class="mb-10">
-        <h3 class="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">🔥 热门能力</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          <CapabilityCard v-for="cap in hotCaps" :key="cap.cap_id" :cap="cap" @click="goDetail(cap.cap_id)" />
-        </div>
-      </section>
-
-      <!-- Category Cards -->
-      <h3 class="text-base font-semibold text-gray-800 mb-4">📂 能力分类</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        <div v-for="cat in categoryTree" :key="cat.id"
-          @click="selectCat(cat)"
-          class="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-lg hover:border-primary-300 transition-all cursor-pointer group">
-          <div class="flex items-center gap-4 mb-3">
-            <div class="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl" :style="{ backgroundColor: cat.color + '15', color: cat.color }">
-              {{ cat.icon }}
+          <div class="w-full lg:w-[420px]">
+            <div class="relative">
+              <input
+                v-model.trim="searchQuery"
+                @keyup.enter="doSearch"
+                class="w-full h-12 rounded-lg border border-gray-300 bg-white px-4 pr-24 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-500"
+                placeholder="搜索能力，如 智能客服、AI监控"
+              />
+              <button
+                type="button"
+                class="absolute right-1.5 top-1.5 h-9 px-4 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+                @click="doSearch"
+              >
+                搜索
+              </button>
             </div>
-            <div class="flex-1">
-              <h2 class="text-lg font-bold text-gray-900 group-hover:text-primary-600 transition-colors">{{ cat.name }}</h2>
-              <p class="text-sm text-gray-500">{{ cat.count }} 个能力</p>
-            </div>
-            <svg class="w-5 h-5 text-gray-400 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-          </div>
-          <p class="text-sm text-gray-600 mb-4">{{ cat.description }}</p>
-          <div class="flex flex-wrap gap-1.5">
-            <span v-for="sub in cat.subcategories" :key="sub.id"
-              class="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-              {{ sub.name }}<span v-if="sub.count" class="text-gray-400 ml-0.5">{{ sub.count }}</span>
-            </span>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- ══════ 分类详情页 ══════ -->
-    <div v-if="selectedCat" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <!-- Breadcrumb -->
-      <div class="flex items-center gap-2 mb-4 text-sm">
-        <button @click="clearCategory" class="text-primary-600 hover:text-primary-700 font-medium">← 全部分类</button>
-        <span class="text-gray-400">/</span>
-        <span class="text-gray-900 font-medium">{{ currentCatInfo.icon }} {{ currentCatInfo.name }}</span>
-      </div>
-
-      <!-- Subcategory tabs -->
-      <div class="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-6 flex-wrap">
-        <button @click="selectedSub = ''; currentPage = 1; loadCaps()"
-          class="px-4 py-2 rounded-lg text-sm font-medium transition"
-          :class="!selectedSub ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
-          全部 ({{ currentCatInfo.count }})
-        </button>
-        <button v-for="sub in activeSubcategories" :key="sub.id" @click="toggleSub(sub.id)"
-          class="px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap"
-          :class="selectedSub === sub.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
-          {{ sub.name }}
-          <span class="text-xs opacity-60 ml-1">{{ sub.count }}</span>
-        </button>
-      </div>
-
-      <!-- Filter bar -->
-      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div class="flex items-center gap-2 flex-wrap">
-          <h2 class="text-lg font-bold text-gray-900">
-            {{ currentTitle }}
-            <span v-if="total" class="text-sm font-normal text-gray-500 ml-1">共 {{ total }} 个</span>
-          </h2>
-          <div class="flex gap-1 ml-2">
-            <button @click="toggleLevel('')"
-              class="px-2.5 py-0.5 rounded-full text-xs transition"
-              :class="!selectedLevel ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">全部</button>
-            <button @click="toggleLevel('atomic')"
-              class="px-2.5 py-0.5 rounded-full text-xs transition"
-              :class="selectedLevel === 'atomic' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">⚛️ 原子能力</button>
-            <button @click="toggleLevel('composite')"
-              class="px-2.5 py-0.5 rounded-full text-xs transition"
-              :class="selectedLevel === 'composite' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">🧩 组合能力</button>
-          </div>
-        </div>
-        <div class="flex gap-1">
-          <button v-for="s in sorts" :key="s.value" @click="currentSort = s.value"
-            class="px-3 py-1 rounded-lg text-sm transition"
-            :class="currentSort === s.value ? 'bg-primary-50 text-primary-600 font-medium' : 'text-gray-500 hover:text-gray-700'">
-            {{ s.label }}
+        <div class="mt-6 flex gap-2 overflow-x-auto pb-1">
+          <button
+            v-for="chip in categoryChips"
+            :key="chip.id"
+            type="button"
+            class="shrink-0 rounded-full border px-4 py-2 text-sm transition"
+            :class="selectedCat === chip.id ? 'border-primary-600 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-900'"
+            @click="selectChip(chip)"
+          >
+            {{ chip.name }}
           </button>
         </div>
       </div>
+    </section>
 
-      <!-- Capability Grid -->
-      <div v-if="caps.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        <CapabilityCard v-for="cap in caps" :key="cap.cap_id" :cap="cap" @click="goDetail(cap.cap_id)" />
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-5">
+        <div>
+          <p class="text-sm text-gray-500">{{ listHint }}</p>
+          <h2 class="mt-1 text-2xl font-bold text-gray-950">{{ listTitle }}</h2>
+        </div>
+        <RouterLink
+          :to="{ path: '/register', query: { role: 'developer' } }"
+          class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-primary-300 hover:text-primary-700"
+        >
+          开发者入驻 / 上传能力
+        </RouterLink>
       </div>
 
-      <!-- Empty -->
-      <div v-else-if="!loading" class="text-center py-20 text-gray-400">
-        <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <p class="text-lg">暂无符合条件的AI能力</p>
+      <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div v-for="i in 6" :key="i" class="h-56 rounded-lg border border-gray-200 bg-white animate-pulse"></div>
       </div>
 
-      <!-- Loading -->
-      <div v-if="loading" class="flex justify-center py-10">
-        <div class="w-8 h-8 border-3 border-primary-200 border-t-primary-500 rounded-full animate-spin"></div>
+      <div v-else-if="displayCaps.length" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <CapabilityCard
+          v-for="cap in displayCaps"
+          :key="cap.cap_id"
+          :cap="cap"
+          @click="goDetail(cap.cap_id)"
+        />
       </div>
 
-      <!-- Pagination -->
-      <div v-if="total > pageSize" class="flex justify-center mt-8 gap-2">
-        <button v-for="p in totalPages" :key="p" @click="currentPage = p"
-          class="w-9 h-9 rounded-lg text-sm transition"
-          :class="currentPage === p ? 'bg-primary-500 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-primary-300'">
-          {{ p }}
+      <div v-else class="rounded-lg border border-gray-200 bg-white p-10 text-center">
+        <h3 class="text-lg font-semibold text-gray-950">暂时没有找到匹配的能力</h3>
+        <p class="mt-2 text-sm text-gray-500">换个关键词，或先查看全部能力模块。</p>
+        <button
+          type="button"
+          class="mt-5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+          @click="resetFilters"
+        >
+          查看全部能力
         </button>
       </div>
-    </div>
+    </section>
 
-    <!-- 搜索结果页 -->
-    <div v-if="searchQuery && !selectedCat" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold text-gray-900">
-          搜索 "{{ searchQuery }}"
-          <span v-if="total" class="text-sm font-normal text-gray-500 ml-1">共 {{ total }} 个</span>
-        </h2>
-        <button @click="searchQuery = ''; loadCaps()" class="text-sm text-gray-500 hover:text-gray-700">清除搜索</button>
+    <section class="border-t border-gray-200 bg-white">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 class="text-base font-semibold text-gray-950">开放能力生态</h2>
+            <p class="mt-1 text-sm text-gray-600">
+              后续平台将支持更多开发者训练、发布、运营自己的行业能力模块。
+            </p>
+          </div>
+          <RouterLink
+            :to="{ path: '/register', query: { role: 'developer' } }"
+            class="inline-flex items-center justify-center rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            申请成为开发者
+          </RouterLink>
+        </div>
       </div>
-      <div v-if="caps.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        <CapabilityCard v-for="cap in caps" :key="cap.cap_id" :cap="cap" @click="goDetail(cap.cap_id)" />
-      </div>
-      <div v-else-if="!loading" class="text-center py-20 text-gray-400">
-        <p class="text-lg">未找到相关能力</p>
-      </div>
-    </div>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import { marketAPI } from '../api'
 import CapabilityCard from '../components/CapabilityCard.vue'
 
@@ -156,105 +118,120 @@ const router = useRouter()
 
 const searchQuery = ref('')
 const selectedCat = ref('')
-const selectedSub = ref('')
-const selectedLevel = ref('')
 const currentSort = ref('call_count')
 const currentPage = ref(1)
-const pageSize = 20
+const pageSize = 24
 const caps = ref([])
 const hotCaps = ref([])
 const categoryTree = ref([])
-const total = ref(0)
 const loading = ref(false)
 
-const sorts = [
-  { label: '最热', value: 'call_count' },
-  { label: '最新', value: 'new' },
-  { label: '评分', value: 'rating' },
-]
-
-const totalPages = computed(() => Math.ceil(total.value / pageSize))
-
-const currentCatInfo = computed(() => {
-  if (!selectedCat.value) return {}
-  return categoryTree.value.find(c => c.id === selectedCat.value) || {}
+const categoryChips = computed(() => {
+  const chips = [{ id: '', name: '全部' }]
+  const apiChips = categoryTree.value.slice(0, 6).map(cat => ({
+    id: cat.id,
+    name: cat.name || cat.title || cat.id,
+  }))
+  if (apiChips.length) {
+    return chips.concat(apiChips)
+  }
+  return chips.concat([
+    { id: 'isp', name: 'ISP智能客服' },
+    { id: 'vision', name: 'AI智能监控' },
+    { id: 'more', name: '更多行业能力' },
+  ])
 })
 
-const activeSubcategories = computed(() => currentCatInfo.value?.subcategories || [])
+const displayCaps = computed(() => {
+  if (searchQuery.value || selectedCat.value) return caps.value
+  if (!hotCaps.value.length) return caps.value
+  const fullById = new Map(caps.value.map(cap => [cap.cap_id, cap]))
+  return hotCaps.value.map(cap => ({ ...cap, ...(fullById.get(cap.cap_id) || {}) }))
+})
 
-const currentTitle = computed(() => {
-  if (selectedSub.value) {
-    return activeSubcategories.value.find(s => s.id === selectedSub.value)?.name || '全部能力'
-  }
-  return currentCatInfo.value?.name || '全部能力'
+const listTitle = computed(() => {
+  if (searchQuery.value) return `搜索：${searchQuery.value}`
+  const cat = categoryChips.value.find(item => item.id === selectedCat.value)
+  if (cat?.id) return cat.name
+  return '推荐能力模块'
+})
+
+const listHint = computed(() => {
+  if (searchQuery.value || selectedCat.value) return '筛选结果'
+  return '简洁浏览，点击卡片查看完整能力介绍'
 })
 
 async function loadCategories() {
   try {
     const { data } = await marketAPI.categories()
-    categoryTree.value = data
-  } catch { categoryTree.value = [] }
+    categoryTree.value = Array.isArray(data) ? data : []
+  } catch {
+    categoryTree.value = []
+  }
 }
 
 async function loadHot() {
   try {
     const { data } = await marketAPI.hot()
-    hotCaps.value = data
-  } catch {}
+    hotCaps.value = Array.isArray(data) ? data : []
+  } catch {
+    hotCaps.value = []
+  }
 }
 
 async function loadCaps() {
   loading.value = true
   try {
-    const params = { page: currentPage.value, size: pageSize, sort: currentSort.value }
+    const params = {
+      page: currentPage.value,
+      size: pageSize,
+      sort: currentSort.value,
+    }
     if (searchQuery.value) params.search = searchQuery.value
-    if (selectedCat.value && !selectedSub.value) params.category = selectedCat.value
-    if (selectedSub.value) params.subcategory = selectedSub.value
-    if (selectedLevel.value) params.level = selectedLevel.value
+    if (selectedCat.value) params.category = selectedCat.value
     const { data } = await marketAPI.list(params)
-    caps.value = data.items || []
-    total.value = data.total || 0
-  } catch { caps.value = []; total.value = 0 }
-  finally { loading.value = false }
+    caps.value = Array.isArray(data.items) ? data.items : []
+  } catch {
+    caps.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
-function doSearch() { currentPage.value = 1; loadCaps() }
-
-function clearCategory() {
+function doSearch() {
   selectedCat.value = ''
-  selectedSub.value = ''
-  selectedLevel.value = ''
-  caps.value = []
-  total.value = 0
-}
-
-function selectCat(cat) {
-  selectedCat.value = cat.id
-  selectedSub.value = ''
-  selectedLevel.value = ''
   currentPage.value = 1
   loadCaps()
 }
 
-function toggleSub(subId) {
-  selectedSub.value = selectedSub.value === subId ? '' : subId
+function selectChip(chip) {
+  searchQuery.value = ''
+  selectedCat.value = chip.id
+  currentPage.value = 1
+  if (chip.id) {
+    loadCaps()
+  } else {
+    loadCaps()
+  }
+}
+
+function resetFilters() {
+  searchQuery.value = ''
+  selectedCat.value = ''
   currentPage.value = 1
   loadCaps()
 }
 
-function toggleLevel(level) {
-  selectedLevel.value = selectedLevel.value === level ? '' : level
-  currentPage.value = 1
-  loadCaps()
+function goDetail(capId) {
+  router.push({ name: 'capability', params: { capId } })
 }
 
-function goDetail(capId) { router.push({ name: 'capability', params: { capId } }) }
+watch(currentSort, () => {
+  currentPage.value = 1
+  loadCaps()
+})
 
-watch([currentSort], () => { currentPage.value = 1; if (selectedCat.value) loadCaps() })
-watch(currentPage, () => { if (selectedCat.value) loadCaps() })
-
-onMounted(() => {
-  loadCategories()
-  loadHot()
+onMounted(async () => {
+  await Promise.all([loadCategories(), loadHot(), loadCaps()])
 })
 </script>
