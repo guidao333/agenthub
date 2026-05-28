@@ -3,7 +3,7 @@
     <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p class="text-sm font-semibold text-primary-700">AgentHub 控制�?/p>
+          <p class="text-sm font-semibold text-primary-700">AgentHub 控制</p>
           <h1 class="mt-1 text-2xl font-bold text-gray-950">我的能力</h1>
         </div>
         <router-link
@@ -31,9 +31,9 @@
         <div class="mb-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <p class="text-sm font-semibold text-gray-900">统一客户�?/p>
+              <p class="text-sm font-semibold text-gray-900">统一客户</p>
               <p class="mt-1 text-sm text-gray-500">
-                {{ clientStatus.online ? `已连�?${clientStatus.online_count} 台客户端` : '未检测到在线客户�? }}
+                {{ clientStatus.online ? `已连接 ${clientStatus.online_count} 台客户端` : '未检测到在线客户端' }}
               </p>
             </div>
             <span
@@ -60,12 +60,12 @@
                   :key="plugin.cap_id"
                   class="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-200"
                 >
-                  {{ plugin.name || plugin.cap_id }} · {{ (plugin.actions || []).length }} 个动�?                </span>
+                  {{ plugin.name || plugin.cap_id }} · {{ (plugin.actions || []).length }} 个动                </span>
               </div>
             </div>
           </div>
           <p v-else class="mt-4 text-sm text-gray-500">
-            下载 Windows 免安装版统一客户端，双击运行后在本地工作台绑�?API Key，这里会显示设备 ID、版本、插件和心跳�?          </p>
+            下载 Windows 免安装版统一客户端，双击运行后在本地工作台绑API Key，这里会显示设备 ID、版本、插件和心跳          </p>
         </div>
 
         <div v-if="loading" class="rounded-lg border border-gray-200 bg-white p-10 text-center text-gray-500">
@@ -87,7 +87,7 @@
                   <div>
                     <h2 class="text-lg font-bold text-gray-950">{{ sub.capability_name || sub.name }}</h2>
                     <p class="mt-0.5 text-xs text-gray-500">
-                      {{ sub.cap_id }} · 订阅�?{{ formatDate(sub.started_at || sub.created_at) }}
+                      {{ sub.cap_id }} · 订阅{{ formatDate(sub.started_at || sub.created_at) }}
                     </p>
                   </div>
                 </div>
@@ -103,7 +103,7 @@
             <div class="mt-5 rounded-lg bg-gray-50 p-4">
               <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div class="min-w-0">
-                  <p class="text-xs font-semibold text-gray-500">客户�?API Key</p>
+                  <p class="text-xs font-semibold text-gray-500">客户API Key</p>
                   <p class="mt-1 break-all font-mono text-sm text-gray-800">{{ maskKey(sub.api_key) }}</p>
                 </div>
                 <button
@@ -133,7 +133,7 @@
                 href="/downloads/AgentHubClientSetup-1.0.17.exe"
                 class="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-100"
               >
-                下载 Windows 安装�?              </a>
+                下载 Windows 安装              </a>
               <button
                 type="button"
                 class="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-100"
@@ -156,10 +156,10 @@
         </div>
 
         <div v-else class="rounded-lg border border-gray-200 bg-white px-6 py-16 text-center">
-          <h2 class="text-lg font-bold text-gray-950">暂无订阅的能�?/h2>
-          <p class="mt-2 text-sm text-gray-500">订阅 ISP 智能客服�?AI 智能监控后，这里会显示配置、客户端和对话入口�?/p>
+          <h2 class="text-lg font-bold text-gray-950">暂无订阅的能</h2>
+          <p class="mt-2 text-sm text-gray-500">订阅 ISP 智能客服AI 智能监控后，这里会显示配置、客户端和对话入口</p>
           <router-link to="/" class="mt-5 inline-flex h-10 items-center rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white hover:bg-primary-700">
-            去市场订�?          </router-link>
+            去市场订          </router-link>
         </div>
       </section>
 
@@ -172,12 +172,12 @@
               <p class="mt-0.5 text-xs text-gray-500">{{ item.cap_id || item.capability_id }}</p>
             </div>
             <div class="text-right">
-              <p class="font-semibold text-gray-950">{{ item.call_count || item.calls || 0 }} �?/p>
+              <p class="font-semibold text-gray-950">{{ item.call_count || item.calls || 0 }} </p>
               <p class="mt-0.5 text-xs text-gray-500">花费 ¥{{ Number(item.cost ?? item.charged ?? 0).toFixed(2) }}</p>
             </div>
           </div>
         </div>
-        <p v-else class="mt-4 text-sm text-gray-500">暂无使用记录�?/p>
+        <p v-else class="mt-4 text-sm text-gray-500">暂无使用记录</p>
       </section>
 
       <section v-if="activeTab === 'keys'" class="rounded-lg border border-gray-200 bg-white p-6">
@@ -193,12 +193,12 @@
             </button>
           </div>
         </div>
-        <p v-else class="mt-4 text-sm text-gray-500">订阅能力后会自动生成 API Key�?/p>
+        <p v-else class="mt-4 text-sm text-gray-500">订阅能力后会自动生成 API Key</p>
       </section>
 
       <section v-if="activeTab === 'bills'" class="rounded-lg border border-gray-200 bg-white p-6">
         <h2 class="text-lg font-bold text-gray-950">账单记录</h2>
-        <p v-if="!bills.length" class="mt-4 text-sm text-gray-500">暂无账单�?/p>
+        <p v-if="!bills.length" class="mt-4 text-sm text-gray-500">暂无账单</p>
         <div v-else class="mt-4 overflow-x-auto">
           <table class="min-w-full text-sm">
             <thead>
@@ -256,7 +256,7 @@ function formatDate(value) {
 }
 
 function maskKey(key) {
-  if (!key) return '未生�?
+  if (!key) return '未生成'
   if (key.length <= 14) return key
   return `${key.slice(0, 8)}...${key.slice(-6)}`
 }
@@ -268,7 +268,7 @@ function capabilityInitial(sub) {
 function copyKey(key) {
   if (!key) return
   navigator.clipboard.writeText(key).then(() => {
-    window.alert('API Key 已复�?)
+    window.alert('API Key 已复制')
   })
 }
 
@@ -282,25 +282,25 @@ function heartbeatText(device) {
 function usageSteps(sub) {
   if (sub.cap_id === 'ai-smart-monitor') {
     return [
-      '下载安装 Windows 客户端并在客户现场监控室电脑或边缘盒子上运行�?,
-      '打开 Windows 客户端，在本地工作台绑定 API Key�?,
-      '在配置页填写摄像头接入、NVR 品牌、AI 能力类型和通知通道�?,
-      '先测试通知，再打开能力对话或事件面板进行巡检、告警和录像回查�?,
+      '下载安装 Windows 客户端并在客户现场监控室电脑或边缘盒子上运行',
+      '打开 Windows 客户端，在本地工作台绑定 API Key',
+      '在配置页填写摄像头接入、NVR 品牌、AI 能力类型和通知通道',
+      '先测试通知，再打开能力对话或事件面板进行巡检、告警和录像回查',
     ]
   }
   if (sub.cap_id === 'isp-smart-cs') {
     return [
-      '下载安装 Windows 客户端并部署在能访问计费、OLT、TR069、IPTV 系统的内网电脑上�?,
-      '打开 Windows 客户端，在本地工作台绑定 API Key，并保持客户端在线�?,
-      '在配置页选择计费系统、OLT 管理系统、TR069 光猫管理系统�?IPTV 系统�?,
-      '配置业务通知通道后，打开能力对话处理查询、故障诊断、续费和工单�?,
+      '下载安装 Windows 客户端并部署在能访问计费、OLT、TR069、IPTV 系统的内网电脑上',
+      '打开 Windows 客户端，在本地工作台绑定 API Key，并保持客户端在线',
+      '在配置页选择计费系统、OLT 管理系统、TR069 光猫管理系统、IPTV 系统',
+      '配置业务通知通道后，打开能力对话处理查询、故障诊断、续费和工单',
     ]
   }
   return [
-    '下载安装 Windows 客户端或按能力说明完成接入�?,
-    '在本地工作台绑定 API Key�?,
-    '完成能力配置�?,
-    '打开能力对话开始使用�?,
+    '下载安装 Windows 客户端或按能力说明完成接入',
+    '在本地工作台绑定 API Key',
+    '完成能力配置',
+    '打开能力对话开始使用',
   ]
 }
 
