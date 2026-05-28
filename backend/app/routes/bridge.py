@@ -70,7 +70,6 @@ def bridge_start(req: BridgeStartRequest, current_user: User = Depends(get_curre
             "id": cap.cap_id,
             "name": cap.name,
             "version": cap.version,
-            "llm_mode": cap.llm_mode,
         },
         "allowed_tools": parse_json_field(session.allowed_tools),
         "expires_in_minutes": 30,

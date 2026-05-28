@@ -117,18 +117,18 @@
             </div>
 
             <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <a
-                :href="`/cap-config.html?cap=${encodeURIComponent(sub.cap_id)}`"
+              <router-link
+                :to="`/cap-config/${sub.cap_id}`"
                 class="inline-flex h-10 items-center justify-center rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white hover:bg-gray-800"
               >
                 配置能力
-              </a>
-              <a
-                :href="`/cap-chat.html?cap=${encodeURIComponent(sub.cap_id)}`"
+              </router-link>
+              <router-link
+                :to="`/cap-chat/${sub.cap_id}`"
                 class="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-100"
               >
                 打开能力对话
-              </a>
+              </router-link>
               <a
                 href="/downloads/AgentHubClientSetup-1.0.17.exe"
                 class="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-100"

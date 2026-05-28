@@ -125,6 +125,20 @@ export const adminAPI = {
   batchPricing: (data) => api.post('/admin/pricing/batch', data),
 }
 
+// Cap Config
+export const capConfigAPI = {
+  myConfig: (capId) => api.get(`/cap-config/my-config/${capId}`),
+  adapterOptions: (capId) => api.get(`/cap-config/adapter-options/${capId}`),
+  save: (capId, config) => api.post('/cap-config/save', { cap_id: capId, config }),
+  test: (capId, config) => api.post('/cap-config/test', { cap_id: capId, config }),
+}
+
+// Capability Chat
+export const capChatAPI = {
+  createSession: (capId) => api.post('/capability-chat/sessions', { cap_id: capId }),
+  chat: (sessionId, message) => api.post('/capability-chat/chat', { session_id: sessionId, message }),
+}
+
 // Vision AI
 export const visionAPI = {
   // 设备

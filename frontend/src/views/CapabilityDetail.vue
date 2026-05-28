@@ -43,12 +43,12 @@
                   {{ subscribing ? '订阅�?..' : '立即订阅' }}
                 </button>
                 <template v-else>
-                  <a :href="`/cap-config.html?cap=${cap.cap_id}`" class="h-10 px-4 inline-flex items-center rounded-lg bg-gray-950 text-white text-sm font-semibold hover:bg-gray-800">
+                  <router-link :to="`/cap-config/${cap.cap_id}`" class="h-10 px-4 inline-flex items-center rounded-lg bg-gray-950 text-white text-sm font-semibold hover:bg-gray-800">
                     配置能力
-                  </a>
-                  <a :href="`/cap-chat.html?cap=${cap.cap_id}`" class="h-10 px-4 inline-flex items-center rounded-lg border border-gray-300 text-gray-800 text-sm font-semibold hover:bg-white">
+                  </router-link>
+                  <router-link :to="`/cap-chat/${cap.cap_id}`" class="h-10 px-4 inline-flex items-center rounded-lg border border-gray-300 text-gray-800 text-sm font-semibold hover:bg-white">
                     打开能力对话
-                  </a>
+                  </router-link>
                   <a href="/downloads/AgentHubClientSetup-1.0.17.exe" class="h-10 px-4 inline-flex items-center rounded-lg border border-gray-300 text-gray-800 text-sm font-semibold hover:bg-white">
                     下载 Windows 安装�?                  </a>
                 </template>
@@ -221,7 +221,7 @@ const details = {
     tech: [
       { label: '执行�?, value: 'AgentHub 统一客户�? },
       { label: '通信', value: 'HTTPS WebSocket' },
-      { label: '推理', value: 'DeepSeek Function Calling' },
+      { label: '推理', value: '平台托管推理引擎' },
       { label: '通知通道', value: '飞书 / 微信 / 短信 / 邮件' },
     ],
   },

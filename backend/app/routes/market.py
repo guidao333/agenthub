@@ -54,8 +54,6 @@ class CapabilityListItem(BaseModel):
 class CapabilityDetail(CapabilityListItem):
     long_description: str | None
     version: str
-    llm_mode: str
-    interfaces_config: dict | None
     published_at: str | None
 
 
@@ -198,8 +196,6 @@ def get_capability(
         "tags": json.loads(cap.tags) if cap.tags else [],
         "pricing_model": cap.pricing_model,
         "price": cap.price,
-        "llm_mode": cap.llm_mode,
-        "interfaces_config": json.loads(cap.interfaces_config) if cap.interfaces_config else None,
         "call_count": cap.call_count,
         "avg_rating": cap.avg_rating,
         "published_at": cap.published_at,

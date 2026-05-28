@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+<script>
+(function() {
+  var cap = new URLSearchParams(window.location.search).get('cap') || 'isp-smart-cs';
+  window.location.replace('/cap-chat/' + cap);
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AgentHub 能力对话</title>
